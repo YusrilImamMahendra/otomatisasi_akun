@@ -145,7 +145,6 @@ def manual_input_verification_code():
     print("PERHATIAN: Tidak dapat mengambil kode verifikasi otomatis")
     print("Silakan cek email Anda dan masukkan kode verifikasi secara manual")
     print("="*50)
-    
     while True:
         code = input("Masukkan kode verifikasi (6 digit): ").strip()
         if len(code) == 6 and code.isdigit():
@@ -156,7 +155,6 @@ def manual_input_verification_code():
 def handle_email_verification(d):
     """Fungsi yang diperbaiki untuk menangani proses verifikasi email"""
     print("Mendeteksi halaman verifikasi email...")
-    
     # Tunggu hingga halaman verifikasi muncul dengan lebih teliti
     verification_detected = False
     for attempt in range(60):  # tunggu maksimal 60 detik
@@ -486,6 +484,19 @@ def register_instagram_lite(email, fullname, username, password):
     else:
         print("Gagal menemukan tombol Next!")
         return
+
+    # PATCH: Tambahkan pengecekan halaman verifikasi kode
+    print("Cek apakah langsung masuk ke halaman verifikasi kode...")
+    for _ in range(10):
+        mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+        if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
+            print("Halaman verifikasi kode terdeteksi, mengeksekusi handle_email_verification ...")
+            handle_email_verification(d)
+            print("Registrasi: handle_email_verification selesai.")
+            return
+        time.sleep(1)
+
+    # Jika tidak langsung ke kode konfirmasi, lanjut normal
     print("Menunggu halaman nama lengkap...")
     found_fullname = wait_for(d, resourceId="com.instagram.lite:id/full_name", timeout=10)
     if not found_fullname:
