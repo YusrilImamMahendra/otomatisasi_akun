@@ -2,6 +2,10 @@ import os
 import subprocess
 import time
 import uiautomator2 as u2
+import imaplib
+import email
+import re
+from email.mime.text import MIMEText
 
 # Konfigurasi path dan device
 MUMU_EXE_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\MuMuPlayer.exe"
@@ -9,10 +13,15 @@ ADB_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe"
 MUMU_DEVICE = "127.0.0.1:7555"
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
-EMAIL = "contoh.email123@gmail.com"
-FULLNAME = "Nama Lengkap"
+EMAIL = "cobaja.1933@gmail.com"
+EMAIL_PASSWORD = "Yuima123"  # Password email untuk IMAP
+FULLNAME = "Djawa33"
 USERNAME = "usernameunik12345"
 PASSWORD = "PasswordKuat2025"
+
+# Konfigurasi IMAP untuk Gmail (sesuaikan dengan provider email Anda)
+IMAP_SERVER = "imap.gmail.com"
+IMAP_PORT = 993
 
 def start_mumu():
     print("Menjalankan emulator MuMu...")
@@ -56,6 +65,208 @@ def wait_for(d, text=None, resourceId=None, timeout=20):
         if resourceId and d(resourceId=resourceId).exists:
             return True
         time.sleep(1)
+    return False
+
+def get_verification_code_from_email(email_address, email_password, timeout=300):
+    """
+    Mengambil kode verifikasi dari email Instagram
+    timeout: waktu tunggu maksimal dalam detik (default 5 menit)
+    """
+    print("Mencari kode verifikasi di email...")
+    
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            # Koneksi ke server IMAP
+            mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+            mail.login(email_address, email_password)
+            mail.select('inbox')
+            
+            # Cari email dari Instagram dalam 10 menit terakhir
+            result, data = mail.search(None, 'FROM "Instagram" SINCE "' + 
+                                     time.strftime('%d-%b-%Y', time.localtime(time.time() - 600)) + '"')
+            
+            if result == 'OK' and data[0]:
+                email_ids = data[0].split()
+                # Ambil email terbaru
+                latest_email_id = email_ids[-1]
+                
+                result, data = mail.fetch(latest_email_id, '(RFC822)')
+                if result == 'OK':
+                    raw_email = data[0][1]
+                    email_message = email.message_from_bytes(raw_email)
+                    
+                    # Ekstrak isi email
+                    body = ""
+                    if email_message.is_multipart():
+                        for part in email_message.walk():
+                            if part.get_content_type() == "text/plain":
+                                body = part.get_payload(decode=True).decode('utf-8')
+                                break
+                    else:
+                        body = email_message.get_payload(decode=True).decode('utf-8')
+                    
+                    # Cari kode verifikasi (biasanya 6 digit)
+                    # Pattern untuk mencari kode 6 digit
+                    patterns = [
+                        r'\b(\d{6})\b',  # 6 digit angka
+                        r'code[:\s]*(\d{6})',  # "code: 123456"
+                        r'verification[:\s]*(\d{6})',  # "verification: 123456"
+                        r'confirm[:\s]*(\d{6})',  # "confirm: 123456"
+                    ]
+                    
+                    for pattern in patterns:
+                        matches = re.findall(pattern, body, re.IGNORECASE)
+                        if matches:
+                            verification_code = matches[0]
+                            print(f"Kode verifikasi ditemukan: {verification_code}")
+                            mail.close()
+                            mail.logout()
+                            return verification_code
+            
+            mail.close()
+            mail.logout()
+            
+        except Exception as e:
+            print(f"Error saat membaca email: {e}")
+        
+        print("Kode verifikasi belum ditemukan, menunggu 10 detik...")
+        time.sleep(10)
+    
+    print("Timeout: Kode verifikasi tidak ditemukan dalam waktu yang ditentukan")
+    return None
+
+def manual_input_verification_code():
+    """Fallback untuk input manual kode verifikasi"""
+    print("\n" + "="*50)
+    print("PERHATIAN: Tidak dapat mengambil kode verifikasi otomatis")
+    print("Silakan cek email Anda dan masukkan kode verifikasi secara manual")
+    print("="*50)
+    
+    while True:
+        code = input("Masukkan kode verifikasi (6 digit): ").strip()
+        if len(code) == 6 and code.isdigit():
+            return code
+        else:
+            print("Kode harus 6 digit angka. Silakan coba lagi.")
+
+def handle_email_verification(d):
+    """Menangani proses verifikasi email"""
+    print("Mendeteksi halaman verifikasi email...")
+    
+    # Tunggu hingga halaman verifikasi muncul
+    verification_detected = False
+    for _ in range(30):  # tunggu maksimal 30 detik
+        # Cek berbagai indikator halaman verifikasi
+        if (d(textContains="verification").exists or 
+            d(textContains="code").exists or 
+            d(textContains="email").exists or
+            d(resourceId="com.instagram.lite:id/confirmation_code").exists):
+            verification_detected = True
+            break
+        time.sleep(1)
+    
+    if not verification_detected:
+        print("Halaman verifikasi tidak terdeteksi")
+        return False
+    
+    print("Halaman verifikasi email terdeteksi")
+    
+    # Coba ambil kode verifikasi dari email secara otomatis
+    verification_code = None
+    if EMAIL_PASSWORD:  # Jika password email sudah diset
+        verification_code = get_verification_code_from_email(EMAIL, EMAIL_PASSWORD)
+    
+    # Jika gagal otomatis, minta input manual
+    if not verification_code:
+        verification_code = manual_input_verification_code()
+    
+    # Masukkan kode verifikasi
+    print(f"Memasukkan kode verifikasi: {verification_code}")
+    
+    # Cari field input kode verifikasi
+    code_field = None
+    if d(resourceId="com.instagram.lite:id/confirmation_code").exists:
+        code_field = d(resourceId="com.instagram.lite:id/confirmation_code")
+    elif d(className="android.widget.EditText").exists:
+        # Jika tidak ada resource ID spesifik, cari EditText
+        edit_texts = d(className="android.widget.EditText")
+        if edit_texts.count > 0:
+            code_field = edit_texts[0]  # Ambil EditText pertama
+    
+    if code_field:
+        code_field.clear_text()
+        time.sleep(0.5)
+        code_field.set_text(verification_code)
+        time.sleep(2)
+        print("Kode verifikasi berhasil dimasukkan")
+        
+        # Cari dan klik tombol konfirmasi
+        if d(text="Confirm").exists:
+            d(text="Confirm").click()
+        elif d(text="Konfirmasi").exists:
+            d(text="Konfirmasi").click()
+        elif d(text="Next").exists:
+            d(text="Next").click()
+        elif d(text="Berikutnya").exists:
+            d(text="Berikutnya").click()
+        else:
+            # Coba koordinat tombol konfirmasi
+            d.click(450, 500)
+        
+        time.sleep(3)
+        return True
+    else:
+        print("Field input kode verifikasi tidak ditemukan")
+        return False
+    """Fungsi untuk debug elemen yang ada di layar"""
+    print("=== DEBUG: Elemen yang ada di layar ===")
+    try:
+        elements = d.dump_hierarchy()
+        print("Struktur UI saat ini tersimpan untuk analisis")
+        
+        # Cari tombol yang mengandung kata "Next" atau "Berikutnya"
+        next_buttons = d(textContains="Next") or d(textContains="Berikutnya")
+        if next_buttons.exists:
+            print(f"Ditemukan tombol Next: {next_buttons.info}")
+        
+        # Cari berdasarkan className Button
+        buttons = d(className="android.widget.Button")
+        print(f"Jumlah tombol ditemukan: {buttons.count}")
+        for i in range(buttons.count):
+            btn_info = buttons[i].info
+            print(f"Tombol {i}: text='{btn_info.get('text', '')}', bounds={btn_info.get('bounds', '')}")
+            
+    except Exception as e:
+        print(f"Error saat debug: {e}")
+
+def check_instagram_lite_installed():
+    """Mengecek apakah Instagram Lite sudah terinstall"""
+    print("Mengecek apakah Instagram Lite sudah terinstall...")
+    d = u2.connect(MUMU_DEVICE)
+    
+    # Metode 1: Coba buka aplikasi Instagram Lite
+    try:
+        d.app_start("com.instagram.lite")
+        time.sleep(3)
+        # Jika berhasil dibuka, berarti sudah terinstall
+        print("Instagram Lite sudah terinstall!")
+        d.app_stop("com.instagram.lite")  # Tutup aplikasi
+        time.sleep(1)
+        return True
+    except Exception as e:
+        print(f"Instagram Lite belum terinstall: {e}")
+    
+    # Metode 2: Cek menggunakan ADB
+    try:
+        result = subprocess.getoutput(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell pm list packages | grep com.instagram.lite')
+        if "com.instagram.lite" in result:
+            print("Instagram Lite sudah terinstall (detected via ADB)!")
+            return True
+    except Exception as e:
+        print(f"Error checking via ADB: {e}")
+    
+    print("Instagram Lite belum terinstall.")
     return False
 
 def install_instagram_lite():
@@ -106,6 +317,15 @@ def install_instagram_lite():
 
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
     return False
+def debug_screen_elements(d):
+    """Menampilkan elemen-elemen UI yang ada di layar untuk keperluan debug."""
+    try:
+        print("=== DEBUG: Elemen yang ada di layar ===")
+        elements = d.dump_hierarchy()
+        print(elements)  # Atau simpan ke file jika terlalu panjang
+    except Exception as e:
+        print(f"Error saat debug elemen layar: {e}")
+# ...existing code...
 
 def register_instagram_lite(email, fullname, username, password):
     d = u2.connect(MUMU_DEVICE)
@@ -125,18 +345,74 @@ def register_instagram_lite(email, fullname, username, password):
 
     # Step 3: Isi email di field (className MultiAutoCompleteTextView)
     print("Mengisi field email...")
-    d(className="android.widget.MultiAutoCompleteTextView").set_text(email)
-    time.sleep(1)
+    email_field = d(className="android.widget.MultiAutoCompleteTextView")
+    if email_field.exists:
+        email_field.clear_text()  # Bersihkan field terlebih dahulu
+        time.sleep(0.5)
+        email_field.set_text(email)
+        time.sleep(2)
+        print(f"Email '{email}' berhasil diisi")
+    else:
+        print("Field email tidak ditemukan!")
+        return
 
-    # Step 4: Klik tombol "Next" (by coordinate)
-    print("Klik tombol Next (by coordinate)...")
-    d.click(450, 485)
-    time.sleep(2)
+    # Debug elemen yang ada setelah mengisi email
+    debug_screen_elements(d)
+
+    # Step 4: Cari dan klik tombol "Next" dengan berbagai metode
+    print("Mencari tombol Next...")
+    next_clicked = False
+    
+    # Metode 1: Cari berdasarkan text "Next"
+    if d(text="Next").exists:
+        print("Mengklik tombol Next berdasarkan text...")
+        d(text="Next").click()
+        next_clicked = True
+    # Metode 2: Cari berdasarkan text "Berikutnya" (untuk bahasa Indonesia)
+    elif d(text="Berikutnya").exists:
+        print("Mengklik tombol Berikutnya...")
+        d(text="Berikutnya").click()
+        next_clicked = True
+    # Metode 3: Cari tombol yang mengandung kata Next
+    elif d(textContains="Next").exists:
+        print("Mengklik tombol yang mengandung Next...")
+        d(textContains="Next").click()
+        next_clicked = True
+    # Metode 4: Cari berdasarkan resource ID (jika ada)
+    elif d(resourceId="com.instagram.lite:id/next_button").exists:
+        print("Mengklik tombol Next berdasarkan resource ID...")
+        d(resourceId="com.instagram.lite:id/next_button").click()
+        next_clicked = True
+    # Metode 5: Cari tombol di posisi yang lebih tepat (koordinat alternatif)
+    else:
+        print("Mencoba klik tombol Next dengan koordinat alternatif...")
+        # Koordinat yang lebih tinggi dari sebelumnya
+        d.click(450, 420)  # Koordinat lebih tinggi
+        next_clicked = True
+    
+    if next_clicked:
+        print("Tombol Next berhasil diklik, menunggu halaman berikutnya...")
+        time.sleep(3)
+    else:
+        print("Gagal menemukan tombol Next!")
+        return
+
+    # Tunggu hingga halaman nama lengkap muncul
+    print("Menunggu halaman nama lengkap...")
+    if not wait_for(d, resourceId="com.instagram.lite:id/full_name", timeout=10):
+        print("Halaman nama lengkap tidak muncul, mencoba lagi...")
+        # Coba klik Next sekali lagi jika belum pindah halaman
+        if d(text="Next").exists:
+            d(text="Next").click()
+            time.sleep(3)
 
     # Isi nama lengkap
     print("Mengisi nama lengkap...")
     if wait_for(d, resourceId="com.instagram.lite:id/full_name"):
-        d(resourceId="com.instagram.lite:id/full_name").set_text(fullname)
+        fullname_field = d(resourceId="com.instagram.lite:id/full_name")
+        fullname_field.clear_text()
+        fullname_field.set_text(fullname)
+        time.sleep(1)
     else:
         print("Field nama lengkap tidak ditemukan.")
         return
@@ -144,7 +420,10 @@ def register_instagram_lite(email, fullname, username, password):
     # Isi username
     print("Mengisi username...")
     if wait_for(d, resourceId="com.instagram.lite:id/username"):
-        d(resourceId="com.instagram.lite:id/username").set_text(username)
+        username_field = d(resourceId="com.instagram.lite:id/username")
+        username_field.clear_text()
+        username_field.set_text(username)
+        time.sleep(1)
     else:
         print("Field username tidak ditemukan.")
         return
@@ -152,28 +431,52 @@ def register_instagram_lite(email, fullname, username, password):
     # Isi password
     print("Mengisi password...")
     if wait_for(d, resourceId="com.instagram.lite:id/password"):
-        d(resourceId="com.instagram.lite:id/password").set_text(password)
+        password_field = d(resourceId="com.instagram.lite:id/password")
+        password_field.clear_text()
+        password_field.set_text(password)
+        time.sleep(1)
     else:
         print("Field password tidak ditemukan.")
         return
 
-    wait_and_click(d, text="Next") or wait_and_click(d, text="Berikutnya")
-    time.sleep(2)
+    # Klik Next untuk melanjutkan
+    print("Klik Next untuk melanjutkan registrasi...")
+    if not (wait_and_click(d, text="Next") or wait_and_click(d, text="Berikutnya")):
+        print("Tombol Next tidak ditemukan, mencoba koordinat...")
+        d.click(450, 600)  # Koordinat alternatif untuk tombol Next
+    
+    time.sleep(3)
 
-    print("Jika ada verifikasi, silakan input manual atau lanjutkan automasi di sini (misal dengan OTP email/SMS).")
-    print("Registrasi Instagram Lite selesai hingga tahap awal (verifikasi manual jika diperlukan).")
+    # Handle verifikasi email jika muncul
+    print("Mengecek apakah ada halaman verifikasi email...")
+    if handle_email_verification(d):
+        print("Verifikasi email berhasil!")
+        time.sleep(3)
+    else:
+        print("Tidak ada verifikasi email atau verifikasi gagal")
+
+    print("Registrasi Instagram Lite selesai!")
+    print("Jika masih ada langkah tambahan, silakan lakukan secara manual.")
 
 def main():
     start_mumu()
     unlock_screen()
-    print("Menunggu 10 detik sebelum automasi Play Store...")
+    print("Menunggu 10 detik sebelum memulai automasi...")
     time.sleep(10)
-    if install_instagram_lite():
-        print("Melanjutkan ke proses registrasi Instagram Lite...")
-        time.sleep(5)
+    
+    # Cek apakah Instagram Lite sudah terinstall
+    if check_instagram_lite_installed():
+        print("Instagram Lite sudah terinstall, langsung menuju proses registrasi...")
+        time.sleep(2)
         register_instagram_lite(EMAIL, FULLNAME, USERNAME, PASSWORD)
     else:
-        print("Automasi install Instagram Lite gagal, proses dihentikan.")
+        print("Instagram Lite belum terinstall, memulai proses install...")
+        if install_instagram_lite():
+            print("Instagram Lite berhasil diinstall, melanjutkan ke proses registrasi...")
+            time.sleep(5)
+            register_instagram_lite(EMAIL, FULLNAME, USERNAME, PASSWORD)
+        else:
+            print("Automasi install Instagram Lite gagal, proses dihentikan.")
         
 if __name__ == "__main__":
     main()
