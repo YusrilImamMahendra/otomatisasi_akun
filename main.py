@@ -13,9 +13,9 @@ ADB_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe"
 MUMU_DEVICE = "127.0.0.1:7555"
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
-EMAIL = "cobaja.1933@gmail.com"
+EMAIL = "cobaja@gmail.com"
 EMAIL_PASSWORD = "Yuima123"  # Password email untuk IMAP
-FULLNAME = "Djawa33"
+FULLNAME = "Nama Lengkap"
 USERNAME = "usernameunik12345"
 PASSWORD = "PasswordKuat2025"
 
@@ -160,8 +160,10 @@ def handle_email_verification(d):
         # Cek berbagai indikator halaman verifikasi
         if (d(textContains="verification").exists or 
             d(textContains="code").exists or 
-            d(textContains="email").exists or
-            d(resourceId="com.instagram.lite:id/confirmation_code").exists):
+            d(textContains="confirm").exists or
+            d(textContains="Enter").exists or
+            d(resourceId="com.instagram.lite:id/confirmation_code").exists or
+            d(className="android.widget.EditText").exists):
             verification_detected = True
             break
         time.sleep(1)
@@ -172,6 +174,10 @@ def handle_email_verification(d):
     
     print("Halaman verifikasi email terdeteksi")
     
+    # Debug elemen yang ada di halaman verifikasi
+    print("=== DEBUG: Mencari field kode verifikasi ===")
+    debug_screen_elements(d)
+    
     # Coba ambil kode verifikasi dari email secara otomatis
     verification_code = None
     if EMAIL_PASSWORD:  # Jika password email sudah diset
@@ -181,64 +187,161 @@ def handle_email_verification(d):
     if not verification_code:
         verification_code = manual_input_verification_code()
     
-    # Masukkan kode verifikasi
+    # Masukkan kode verifikasi dengan berbagai metode
     print(f"Memasukkan kode verifikasi: {verification_code}")
     
-    # Cari field input kode verifikasi
-    code_field = None
-    if d(resourceId="com.instagram.lite:id/confirmation_code").exists:
-        code_field = d(resourceId="com.instagram.lite:id/confirmation_code")
-    elif d(className="android.widget.EditText").exists:
-        # Jika tidak ada resource ID spesifik, cari EditText
-        edit_texts = d(className="android.widget.EditText")
-        if edit_texts.count > 0:
-            code_field = edit_texts[0]  # Ambil EditText pertama
+    success = False
     
-    if code_field:
-        code_field.clear_text()
-        time.sleep(0.5)
-        code_field.set_text(verification_code)
-        time.sleep(2)
-        print("Kode verifikasi berhasil dimasukkan")
+    # Metode 1: Cari berdasarkan resource ID yang umum
+    possible_resource_ids = [
+        "com.instagram.lite:id/confirmation_code",
+        "com.instagram.lite:id/code_text",
+        "com.instagram.lite:id/verify_code",
+        "com.instagram.lite:id/code_input",
+        "com.instagram.lite:id/verification_code"
+    ]
+    
+    for resource_id in possible_resource_ids:
+        if d(resourceId=resource_id).exists:
+            print(f"Menemukan field dengan resource ID: {resource_id}")
+            code_field = d(resourceId=resource_id)
+            code_field.click()  # Fokus ke field
+            time.sleep(0.5)
+            code_field.clear_text()
+            time.sleep(0.5)
+            code_field.set_text(verification_code)
+            time.sleep(1)
+            success = True
+            break
+    
+    # Metode 2: Cari semua EditText dan coba satu per satu
+    if not success:
+        print("Mencari melalui semua EditText...")
+        edit_texts = d(className="android.widget.EditText")
+        print(f"Ditemukan {edit_texts.count} EditText")
         
-        # Cari dan klik tombol konfirmasi
-        if d(text="Confirm").exists:
-            d(text="Confirm").click()
-        elif d(text="Konfirmasi").exists:
-            d(text="Konfirmasi").click()
-        elif d(text="Next").exists:
-            d(text="Next").click()
-        elif d(text="Berikutnya").exists:
-            d(text="Berikutnya").click()
-        else:
-            # Coba koordinat tombol konfirmasi
-            d.click(450, 500)
+        for i in range(edit_texts.count):
+            try:
+                field = edit_texts[i]
+                field_info = field.info
+                print(f"EditText {i}: bounds={field_info.get('bounds')}, text='{field_info.get('text', '')}'")
+                
+                # Coba isi field ini
+                field.click()
+                time.sleep(0.5)
+                field.clear_text()
+                time.sleep(0.5)
+                field.set_text(verification_code)
+                time.sleep(1)
+                
+                # Cek apakah berhasil terisi
+                current_text = field.get_text()
+                if verification_code in current_text:
+                    print(f"Berhasil mengisi kode di EditText {i}")
+                    success = True
+                    break
+                else:
+                    print(f"Gagal mengisi EditText {i}, mencoba yang lain...")
+            except Exception as e:
+                print(f"Error pada EditText {i}: {e}")
+                continue
+    
+    # Metode 3: Input menggunakan koordinat (fallback)
+    if not success:
+        print("Mencoba input dengan koordinat tengah layar...")
+        # Klik di tengah layar (biasanya lokasi field input)
+        d.click(450, 400)
+        time.sleep(0.5)
+        
+        # Hapus text yang ada (jika ada)
+        d.long_click(450, 400)  # Long click untuk select all
+        time.sleep(0.5)
+        d.press("del")  # Delete
+        time.sleep(0.5)
+        
+        # Input kode menggunakan send_keys
+        d.send_keys(verification_code)
+        time.sleep(1)
+        success = True
+        print("Kode dimasukkan menggunakan koordinat")
+    
+    # Metode 4: Input digit per digit jika field terpisah
+    if not success:
+        print("Mencoba input digit per digit...")
+        # Beberapa aplikasi menggunakan 6 field terpisah untuk setiap digit
+        start_x = 200  # Koordinat X mulai
+        y = 400        # Koordinat Y
+        spacing = 80   # Jarak antar field
+        
+        for i, digit in enumerate(verification_code):
+            x = start_x + (i * spacing)
+            d.click(x, y)
+            time.sleep(0.2)
+            d.send_keys(digit)
+            time.sleep(0.2)
+        success = True
+        print("Kode dimasukkan digit per digit")
+    
+    if success:
+        print("Kode verifikasi berhasil dimasukkan")
+        time.sleep(2)
+        
+        # Tunggu sebentar untuk memastikan kode terproses
+        time.sleep(1)
+        
+        # Cari dan klik tombol konfirmasi dengan berbagai metode
+        confirmation_clicked = False
+        
+        # Daftar kemungkinan text tombol konfirmasi
+        confirm_buttons = ["Confirm", "Konfirmasi", "Next", "Berikutnya", "Continue", "Lanjutkan", "Verify", "Verifikasi"]
+        
+        for button_text in confirm_buttons:
+            if d(text=button_text).exists:
+                print(f"Mengklik tombol: {button_text}")
+                d(text=button_text).click()
+                confirmation_clicked = True
+                break
+        
+        # Jika tidak ada tombol text, cari tombol berdasarkan className
+        if not confirmation_clicked:
+            buttons = d(className="android.widget.Button")
+            if buttons.count > 0:
+                print("Mengklik tombol terakhir yang ditemukan...")
+                buttons[-1].click()  # Klik tombol terakhir (biasanya tombol konfirmasi)
+                confirmation_clicked = True
+        
+        # Fallback: klik koordinat tombol konfirmasi
+        if not confirmation_clicked:
+            print("Mengklik tombol konfirmasi dengan koordinat...")
+            d.click(450, 500)  # Koordinat standar tombol konfirmasi
         
         time.sleep(3)
         return True
     else:
-        print("Field input kode verifikasi tidak ditemukan")
+        print("Gagal memasukkan kode verifikasi")
         return False
-    """Fungsi untuk debug elemen yang ada di layar"""
-    print("=== DEBUG: Elemen yang ada di layar ===")
-    try:
-        elements = d.dump_hierarchy()
-        print("Struktur UI saat ini tersimpan untuk analisis")
-        
-        # Cari tombol yang mengandung kata "Next" atau "Berikutnya"
-        next_buttons = d(textContains="Next") or d(textContains="Berikutnya")
-        if next_buttons.exists:
-            print(f"Ditemukan tombol Next: {next_buttons.info}")
-        
-        # Cari berdasarkan className Button
-        buttons = d(className="android.widget.Button")
-        print(f"Jumlah tombol ditemukan: {buttons.count}")
-        for i in range(buttons.count):
-            btn_info = buttons[i].info
-            print(f"Tombol {i}: text='{btn_info.get('text', '')}', bounds={btn_info.get('bounds', '')}")
+    
+def debug_screen_elements(d):
+        """Fungsi untuk debug elemen yang ada di layar"""
+        print("=== DEBUG: Elemen yang ada di layar ===")
+        try:
+            elements = d.dump_hierarchy()
+            print("Struktur UI saat ini tersimpan untuk analisis")
             
-    except Exception as e:
-        print(f"Error saat debug: {e}")
+            # Cari tombol yang mengandung kata "Next" atau "Berikutnya"
+            next_buttons = d(textContains="Next") or d(textContains="Berikutnya")
+            if next_buttons.exists:
+                print(f"Ditemukan tombol Next: {next_buttons.info}")
+            
+            # Cari berdasarkan className Button
+            buttons = d(className="android.widget.Button")
+            print(f"Jumlah tombol ditemukan: {buttons.count}")
+            for i in range(buttons.count):
+                btn_info = buttons[i].info
+                print(f"Tombol {i}: text='{btn_info.get('text', '')}', bounds={btn_info.get('bounds', '')}")
+                
+        except Exception as e:
+            print(f"Error saat debug: {e}")
 
 def check_instagram_lite_installed():
     """Mengecek apakah Instagram Lite sudah terinstall"""
@@ -317,15 +420,6 @@ def install_instagram_lite():
 
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
     return False
-def debug_screen_elements(d):
-    """Menampilkan elemen-elemen UI yang ada di layar untuk keperluan debug."""
-    try:
-        print("=== DEBUG: Elemen yang ada di layar ===")
-        elements = d.dump_hierarchy()
-        print(elements)  # Atau simpan ke file jika terlalu panjang
-    except Exception as e:
-        print(f"Error saat debug elemen layar: {e}")
-# ...existing code...
 
 def register_instagram_lite(email, fullname, username, password):
     d = u2.connect(MUMU_DEVICE)
