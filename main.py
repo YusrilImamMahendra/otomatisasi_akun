@@ -69,69 +69,128 @@ def wait_for(d, text=None, resourceId=None, timeout=20):
 
 def get_verification_code_from_email(email_address, email_password, timeout=300):
     """
-    Mengambil kode verifikasi dari email Instagram
-    timeout: waktu tunggu maksimal dalam detik (default 5 menit)
+    Fungsi yang diperbaiki untuk mengambil kode verifikasi dari email Instagram
     """
     print("Mencari kode verifikasi di email...")
     
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            # Koneksi ke server IMAP
+            # Koneksi ke server IMAP dengan SSL
+            print("Menghubungkan ke server email...")
             mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
             mail.login(email_address, email_password)
             mail.select('inbox')
             
-            # Cari email dari Instagram dalam 10 menit terakhir
-            result, data = mail.search(None, 'FROM "Instagram" SINCE "' + 
-                                     time.strftime('%d-%b-%Y', time.localtime(time.time() - 600)) + '"')
+            # Cari email dari Instagram dengan berbagai kriteria
+            search_criteria = [
+                '(FROM "Instagram" UNSEEN)',  # Email belum dibaca dari Instagram
+                '(FROM "Instagram")',         # Semua email dari Instagram
+                '(FROM "noreply@instagram.com")',  # Email spesifik Instagram
+                '(FROM "security@mail.instagram.com")',  # Email security Instagram
+                '(SUBJECT "Instagram")',      # Subject mengandung Instagram
+                '(BODY "verification")',      # Body mengandung verification
+                '(BODY "confirm")'            # Body mengandung confirm
+            ]
             
-            if result == 'OK' and data[0]:
-                email_ids = data[0].split()
-                # Ambil email terbaru
-                latest_email_id = email_ids[-1]
+            email_found = False
+            for criteria in search_criteria:
+                print(f"Mencari dengan kriteria: {criteria}")
+                result, data = mail.search(None, criteria)
                 
-                result, data = mail.fetch(latest_email_id, '(RFC822)')
-                if result == 'OK':
-                    raw_email = data[0][1]
-                    email_message = email.message_from_bytes(raw_email)
-                    
-                    # Ekstrak isi email
-                    body = ""
-                    if email_message.is_multipart():
-                        for part in email_message.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode('utf-8')
-                                break
-                    else:
-                        body = email_message.get_payload(decode=True).decode('utf-8')
-                    
-                    # Cari kode verifikasi (biasanya 6 digit)
-                    # Pattern untuk mencari kode 6 digit
-                    patterns = [
-                        r'\b(\d{6})\b',  # 6 digit angka
-                        r'code[:\s]*(\d{6})',  # "code: 123456"
-                        r'verification[:\s]*(\d{6})',  # "verification: 123456"
-                        r'confirm[:\s]*(\d{6})',  # "confirm: 123456"
-                    ]
-                    
-                    for pattern in patterns:
-                        matches = re.findall(pattern, body, re.IGNORECASE)
-                        if matches:
-                            verification_code = matches[0]
-                            print(f"Kode verifikasi ditemukan: {verification_code}")
-                            mail.close()
-                            mail.logout()
-                            return verification_code
+                if result == 'OK' and data[0]:
+                    email_ids = data[0].split()
+                    if email_ids:
+                        email_found = True
+                        print(f"Ditemukan {len(email_ids)} email dengan kriteria ini")
+                        
+                        # Coba email terbaru hingga 3 email terakhir
+                        for email_id in reversed(email_ids[-3:]):
+                            print(f"Memeriksa email ID: {email_id}")
+                            
+                            result, data = mail.fetch(email_id, '(RFC822)')
+                            if result == 'OK':
+                                raw_email = data[0][1]
+                                email_message = email.message_from_bytes(raw_email)
+                                
+                                # Cek subject dan dari
+                                subject = email_message.get('Subject', '')
+                                from_addr = email_message.get('From', '')
+                                date = email_message.get('Date', '')
+                                
+                                print(f"Email - From: {from_addr}, Subject: {subject}, Date: {date}")
+                                
+                                # Ekstrak isi email
+                                body = ""
+                                if email_message.is_multipart():
+                                    for part in email_message.walk():
+                                        content_type = part.get_content_type()
+                                        if content_type in ["text/plain", "text/html"]:
+                                            try:
+                                                payload = part.get_payload(decode=True)
+                                                if payload:
+                                                    body += payload.decode('utf-8', errors='ignore')
+                                            except:
+                                                continue
+                                else:
+                                    try:
+                                        payload = email_message.get_payload(decode=True)
+                                        if payload:
+                                            body = payload.decode('utf-8', errors='ignore')
+                                    except:
+                                        continue
+                                
+                                print(f"Isi email (100 karakter pertama): {body[:100]}...")
+                                
+                                # Cari kode verifikasi dengan pattern yang lebih lengkap
+                                patterns = [
+                                    r'\b(\d{6})\b',  # 6 digit angka
+                                    r'(?:code|kode)[:\s]*(\d{6})',  # "code: 123456" atau "kode: 123456"
+                                    r'(?:verification|verifikasi)[:\s]*(\d{6})',  # "verification: 123456"
+                                    r'(?:confirm|konfirmasi)[:\s]*(\d{6})',  # "confirm: 123456"
+                                    r'(?:your|anda)[:\s]*(?:code|kode)[:\s]*(?:is|adalah)[:\s]*(\d{6})',  # "your code is 123456"
+                                    r'(\d{6})[:\s]*(?:is|adalah)[:\s]*(?:your|anda)[:\s]*(?:code|kode)',  # "123456 is your code"
+                                    r'Enter[:\s]*(?:the|)[:\s]*(?:code|kode)[:\s]*(\d{6})',  # "Enter the code 123456"
+                                    r'<[^>]*>(\d{6})<[^>]*>',  # Kode dalam tag HTML
+                                    r'(?:please|silakan)[:\s]*(?:enter|masukkan)[:\s]*(\d{6})',  # "please enter 123456"
+                                ]
+                                
+                                for pattern in patterns:
+                                    matches = re.findall(pattern, body, re.IGNORECASE)
+                                    if matches:
+                                        verification_code = matches[0]
+                                        print(f"Kode verifikasi ditemukan dengan pattern '{pattern}': {verification_code}")
+                                        
+                                        # Validasi kode (harus 6 digit angka)
+                                        if len(verification_code) == 6 and verification_code.isdigit():
+                                            mail.close()
+                                            mail.logout()
+                                            return verification_code
+                                        else:
+                                            print(f"Kode tidak valid: {verification_code}")
+                        
+                        if email_found:
+                            break  # Jika sudah menemukan email, tidak perlu cari dengan criteria lain
+            
+            if not email_found:
+                print("Tidak ditemukan email dari Instagram")
             
             mail.close()
             mail.logout()
             
+        except imaplib.IMAP4.error as e:
+            print(f"Error IMAP: {e}")
+            if "authentication failed" in str(e).lower():
+                print("PERHATIAN: Authentication failed. Pastikan:")
+                print("1. Email dan password benar")
+                print("2. 2-Step Verification diaktifkan dan menggunakan App Password")
+                print("3. 'Less secure app access' diaktifkan (jika tidak menggunakan App Password)")
+                break
         except Exception as e:
             print(f"Error saat membaca email: {e}")
         
-        print("Kode verifikasi belum ditemukan, menunggu 10 detik...")
-        time.sleep(10)
+        print("Kode verifikasi belum ditemukan, menunggu 15 detik...")
+        time.sleep(15)
     
     print("Timeout: Kode verifikasi tidak ditemukan dalam waktu yang ditentukan")
     return None
@@ -151,28 +210,40 @@ def manual_input_verification_code():
             print("Kode harus 6 digit angka. Silakan coba lagi.")
 
 def handle_email_verification(d):
-    """Menangani proses verifikasi email"""
+    """Fungsi yang diperbaiki untuk menangani proses verifikasi email"""
     print("Mendeteksi halaman verifikasi email...")
     
-    # Tunggu hingga halaman verifikasi muncul
+    # Tunggu hingga halaman verifikasi muncul dengan lebih teliti
     verification_detected = False
-    for _ in range(30):  # tunggu maksimal 30 detik
+    for attempt in range(60):  # tunggu maksimal 60 detik
+        print(f"Attempt {attempt + 1}: Mencari halaman verifikasi...")
+        
         # Cek berbagai indikator halaman verifikasi
-        if (d(textContains="verification").exists or 
-            d(textContains="code").exists or 
-            d(textContains="confirm").exists or
-            d(textContains="Enter").exists or
-            d(resourceId="com.instagram.lite:id/confirmation_code").exists or
-            d(className="android.widget.EditText").exists):
+        indicators = [
+            d(textContains="confirmation").exists,
+            d(textContains="verification").exists,
+            d(textContains="code").exists,
+            d(textContains="confirm").exists,
+            d(textContains="Enter").exists,
+            d(textContains="6-digit").exists,
+            d(textContains="digit").exists,
+            d(className="android.widget.EditText").exists,
+            d(resourceId="com.instagram.lite:id/confirmation_code").exists,
+        ]
+        
+        if any(indicators):
             verification_detected = True
+            print("Halaman verifikasi email terdeteksi!")
             break
+        
         time.sleep(1)
     
     if not verification_detected:
-        print("Halaman verifikasi tidak terdeteksi")
+        print("Halaman verifikasi tidak terdeteksi setelah 60 detik")
         return False
     
-    print("Halaman verifikasi email terdeteksi")
+    # Beri waktu untuk halaman fully loaded
+    time.sleep(2)
     
     # Debug elemen yang ada di halaman verifikasi
     print("=== DEBUG: Mencari field kode verifikasi ===")
@@ -181,40 +252,52 @@ def handle_email_verification(d):
     # Coba ambil kode verifikasi dari email secara otomatis
     verification_code = None
     if EMAIL_PASSWORD:  # Jika password email sudah diset
-        verification_code = get_verification_code_from_email(EMAIL, EMAIL_PASSWORD)
+        print("Mencoba mengambil kode verifikasi dari email...")
+        verification_code = get_verification_code_from_email(EMAIL, EMAIL_PASSWORD, timeout=180)  # 3 menit
     
     # Jika gagal otomatis, minta input manual
     if not verification_code:
         verification_code = manual_input_verification_code()
     
-    # Masukkan kode verifikasi dengan berbagai metode
+    # Masukkan kode verifikasi dengan metode yang diperbaiki
     print(f"Memasukkan kode verifikasi: {verification_code}")
     
     success = False
     
-    # Metode 1: Cari berdasarkan resource ID yang umum
+    # Metode 1: Cari berdasarkan resource ID yang lebih lengkap
     possible_resource_ids = [
         "com.instagram.lite:id/confirmation_code",
         "com.instagram.lite:id/code_text",
         "com.instagram.lite:id/verify_code",
         "com.instagram.lite:id/code_input",
-        "com.instagram.lite:id/verification_code"
+        "com.instagram.lite:id/verification_code",
+        "com.instagram.lite:id/edittext_confirmation_code",
+        "com.instagram.lite:id/code_field"
     ]
     
     for resource_id in possible_resource_ids:
         if d(resourceId=resource_id).exists:
             print(f"Menemukan field dengan resource ID: {resource_id}")
-            code_field = d(resourceId=resource_id)
-            code_field.click()  # Fokus ke field
-            time.sleep(0.5)
-            code_field.clear_text()
-            time.sleep(0.5)
-            code_field.set_text(verification_code)
-            time.sleep(1)
-            success = True
-            break
+            try:
+                code_field = d(resourceId=resource_id)
+                code_field.click()
+                time.sleep(1)
+                code_field.clear_text()
+                time.sleep(0.5)
+                code_field.set_text(verification_code)
+                time.sleep(1)
+                
+                # Verifikasi apakah kode berhasil dimasukkan
+                current_text = code_field.get_text()
+                if verification_code in current_text or len(current_text) == 6:
+                    print("Kode berhasil dimasukkan!")
+                    success = True
+                    break
+            except Exception as e:
+                print(f"Error pada resource ID {resource_id}: {e}")
+                continue
     
-    # Metode 2: Cari semua EditText dan coba satu per satu
+    # Metode 2: Cari semua EditText dan coba yang paling cocok
     if not success:
         print("Mencari melalui semua EditText...")
         edit_texts = d(className="android.widget.EditText")
@@ -224,7 +307,16 @@ def handle_email_verification(d):
             try:
                 field = edit_texts[i]
                 field_info = field.info
-                print(f"EditText {i}: bounds={field_info.get('bounds')}, text='{field_info.get('text', '')}'")
+                
+                # Cek apakah field ini kemungkinan untuk kode verifikasi
+                bounds = field_info.get('bounds', {})
+                current_text = field_info.get('text', '')
+                
+                print(f"EditText {i}: bounds={bounds}, text='{current_text}'")
+                
+                # Skip field yang sudah terisi dengan text yang tidak relevan
+                if current_text and len(current_text) > 10:
+                    continue
                 
                 # Coba isi field ini
                 field.click()
@@ -235,65 +327,116 @@ def handle_email_verification(d):
                 time.sleep(1)
                 
                 # Cek apakah berhasil terisi
-                current_text = field.get_text()
-                if verification_code in current_text:
+                updated_text = field.get_text()
+                if verification_code in updated_text or len(updated_text) == 6:
                     print(f"Berhasil mengisi kode di EditText {i}")
                     success = True
                     break
                 else:
-                    print(f"Gagal mengisi EditText {i}, mencoba yang lain...")
+                    print(f"Gagal mengisi EditText {i} (text sekarang: '{updated_text}')")
             except Exception as e:
                 print(f"Error pada EditText {i}: {e}")
                 continue
-    
-    # Metode 3: Input menggunakan koordinat (fallback)
     if not success:
-        print("Mencoba input dengan koordinat tengah layar...")
-        # Klik di tengah layar (biasanya lokasi field input)
-        d.click(450, 400)
-        time.sleep(0.5)
+        print("Mencari melalui MultiAutoCompleteTextView...")
+        mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+        print(f"Ditemukan {mac_fields.count} MultiAutoCompleteTextView")
+    for i in range(mac_fields.count):
+        try:
+            field = mac_fields[i]
+            field_info = field.info
+            print(f"MultiAutoCompleteTextView {i}: bounds={field_info.get('bounds')}, text='{field_info.get('text', '')}'")
+            field.click()
+            time.sleep(0.5)
+            field.clear_text()
+            time.sleep(0.5)
+            field.set_text(verification_code)
+            time.sleep(1)
+            current_text = field.get_text()
+            if verification_code in current_text or len(current_text.strip()) == 6:
+                print(f"Berhasil mengisi kode di MultiAutoCompleteTextView {i}")
+                success = True
+                break
+            else:
+                print(f"Gagal mengisi MultiAutoCompleteTextView {i}, mencoba yang lain...")
+        except Exception as e:
+            print(f"Error pada MultiAutoCompleteTextView {i}: {e}")
+            continue
+    # Metode 3: Cari field yang memiliki hint atau placeholder terkait kode
+    if not success:
+        print("Mencari field berdasarkan hint/placeholder...")
+        possible_hints = ["code", "verification", "confirm", "6-digit", "digit"]
+        
+        for hint in possible_hints:
+            elements = d(textContains=hint)
+            if elements.exists:
+                for i in range(elements.count):
+                    try:
+                        element = elements[i]
+                        # Cek apakah ini EditText atau field input
+                        if element.info.get('className') == 'android.widget.EditText':
+                            element.click()
+                            time.sleep(0.5)
+                            element.clear_text()
+                            time.sleep(0.5)
+                            element.set_text(verification_code)
+                            time.sleep(1)
+                            
+                            # Verifikasi
+                            if verification_code in element.get_text():
+                                print(f"Berhasil mengisi kode di field dengan hint '{hint}'")
+                                success = True
+                                break
+                    except Exception as e:
+                        print(f"Error pada field dengan hint '{hint}': {e}")
+                        continue
+                
+                if success:
+                    break
+    
+    # Metode 4: Input menggunakan koordinat berdasarkan gambar
+    if not success:
+        print("Mencoba input dengan koordinat berdasarkan gambar...")
+        # Berdasarkan gambar, field kode verifikasi berada di tengah layar
+        x, y = 450, 180  # Koordinat field input berdasarkan gambar
+        
+        # Klik pada field
+        d.click(x, y)
+        time.sleep(1)
         
         # Hapus text yang ada (jika ada)
-        d.long_click(450, 400)  # Long click untuk select all
+        d.long_click(x, y)
         time.sleep(0.5)
-        d.press("del")  # Delete
+        d.press("del")
+        time.sleep(0.5)
+        
+        # Clear menggunakan Ctrl+A dan Delete
+        d.press("ctrl+a")
+        time.sleep(0.5)
+        d.press("del")
         time.sleep(0.5)
         
         # Input kode menggunakan send_keys
         d.send_keys(verification_code)
         time.sleep(1)
-        success = True
-        print("Kode dimasukkan menggunakan koordinat")
-    
-    # Metode 4: Input digit per digit jika field terpisah
-    if not success:
-        print("Mencoba input digit per digit...")
-        # Beberapa aplikasi menggunakan 6 field terpisah untuk setiap digit
-        start_x = 200  # Koordinat X mulai
-        y = 400        # Koordinat Y
-        spacing = 80   # Jarak antar field
         
-        for i, digit in enumerate(verification_code):
-            x = start_x + (i * spacing)
-            d.click(x, y)
-            time.sleep(0.2)
-            d.send_keys(digit)
-            time.sleep(0.2)
+        # Verifikasi dengan screenshot atau dump
+        print("Kode dimasukkan menggunakan koordinat")
         success = True
-        print("Kode dimasukkan digit per digit")
     
     if success:
         print("Kode verifikasi berhasil dimasukkan")
         time.sleep(2)
         
-        # Tunggu sebentar untuk memastikan kode terproses
-        time.sleep(1)
-        
-        # Cari dan klik tombol konfirmasi dengan berbagai metode
+        # Cari dan klik tombol konfirmasi
         confirmation_clicked = False
         
         # Daftar kemungkinan text tombol konfirmasi
-        confirm_buttons = ["Confirm", "Konfirmasi", "Next", "Berikutnya", "Continue", "Lanjutkan", "Verify", "Verifikasi"]
+        confirm_buttons = [
+            "Next", "Berikutnya", "Continue", "Lanjutkan", 
+            "Confirm", "Konfirmasi", "Verify", "Verifikasi",
+            "Submit", "Kirim", "Done", "Selesai"
+        ]
         
         for button_text in confirm_buttons:
             if d(text=button_text).exists:
@@ -302,46 +445,71 @@ def handle_email_verification(d):
                 confirmation_clicked = True
                 break
         
-        # Jika tidak ada tombol text, cari tombol berdasarkan className
+        # Jika tidak ada tombol text, cari tombol berdasarkan koordinat
         if not confirmation_clicked:
-            buttons = d(className="android.widget.Button")
-            if buttons.count > 0:
-                print("Mengklik tombol terakhir yang ditemukan...")
-                buttons[-1].click()  # Klik tombol terakhir (biasanya tombol konfirmasi)
-                confirmation_clicked = True
-        
-        # Fallback: klik koordinat tombol konfirmasi
-        if not confirmation_clicked:
-            print("Mengklik tombol konfirmasi dengan koordinat...")
-            d.click(450, 500)  # Koordinat standar tombol konfirmasi
+            print("Mencari tombol konfirmasi berdasarkan koordinat...")
+            # Berdasarkan gambar, tombol Next berada di bawah field input
+            button_x, button_y = 450, 215  # Koordinat tombol Next berdasarkan gambar
+            d.click(button_x, button_y)
+            confirmation_clicked = True
+            print("Tombol konfirmasi diklik menggunakan koordinat")
         
         time.sleep(3)
-        return True
+        
+        # Cek apakah verifikasi berhasil (pindah ke halaman berikutnya)
+        verification_success = False
+        for _ in range(10):
+            # Cek apakah sudah tidak ada lagi field kode verifikasi
+            if not (d(textContains="confirmation").exists or 
+                   d(textContains="verification").exists or
+                   d(textContains="Enter").exists):
+                verification_success = True
+                break
+            time.sleep(1)
+        
+        if verification_success:
+            print("Verifikasi email berhasil!")
+            return True
+        else:
+            print("Mungkin kode verifikasi salah atau ada masalah lain")
+            return False
     else:
         print("Gagal memasukkan kode verifikasi")
         return False
-    
+
 def debug_screen_elements(d):
-        """Fungsi untuk debug elemen yang ada di layar"""
-        print("=== DEBUG: Elemen yang ada di layar ===")
-        try:
-            elements = d.dump_hierarchy()
-            print("Struktur UI saat ini tersimpan untuk analisis")
-            
-            # Cari tombol yang mengandung kata "Next" atau "Berikutnya"
-            next_buttons = d(textContains="Next") or d(textContains="Berikutnya")
-            if next_buttons.exists:
-                print(f"Ditemukan tombol Next: {next_buttons.info}")
-            
-            # Cari berdasarkan className Button
-            buttons = d(className="android.widget.Button")
-            print(f"Jumlah tombol ditemukan: {buttons.count}")
-            for i in range(buttons.count):
-                btn_info = buttons[i].info
-                print(f"Tombol {i}: text='{btn_info.get('text', '')}', bounds={btn_info.get('bounds', '')}")
+    """Fungsi untuk debug elemen yang ada di layar"""
+    print("=== DEBUG: Elemen yang ada di layar ===")
+    try:
+        # Dump semua elemen EditText
+        edit_texts = d(className="android.widget.EditText")
+        print(f"Jumlah EditText ditemukan: {edit_texts.count}")
+        for i in range(edit_texts.count):
+            try:
+                info = edit_texts[i].info
+                print(f"EditText {i}: text='{info.get('text', '')}', bounds={info.get('bounds', '')}, resourceId='{info.get('resourceId', '')}'")
+            except:
+                print(f"EditText {i}: Error getting info")
+        
+        # Dump semua tombol
+        buttons = d(className="android.widget.Button")
+        print(f"Jumlah Button ditemukan: {buttons.count}")
+        for i in range(buttons.count):
+            try:
+                info = buttons[i].info
+                print(f"Button {i}: text='{info.get('text', '')}', bounds={info.get('bounds', '')}, resourceId='{info.get('resourceId', '')}'")
+            except:
+                print(f"Button {i}: Error getting info")
+        
+        # Cari elemen yang mengandung kata kunci tertentu
+        keywords = ["code", "verification", "confirm", "next", "digit"]
+        for keyword in keywords:
+            elements = d(textContains=keyword)
+            if elements.exists:
+                print(f"Elemen dengan '{keyword}': {elements.count} ditemukan")
                 
-        except Exception as e:
-            print(f"Error saat debug: {e}")
+    except Exception as e:
+        print(f"Error saat debug: {e}")
 
 def check_instagram_lite_installed():
     """Mengecek apakah Instagram Lite sudah terinstall"""
