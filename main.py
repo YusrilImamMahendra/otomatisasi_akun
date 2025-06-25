@@ -113,23 +113,24 @@ def register_instagram_lite(email, fullname, username, password):
     d.app_start("com.instagram.lite")
     time.sleep(5)
 
-    # Mulai proses registrasi
-    print("Menekan tombol 'Sign up with email or phone number'...")
-    if not wait_and_click(d, text="create"):
-        print("Gagal menemukan tombol registrasi. Coba cari dengan bahasa Indonesia...")
-        if not wait_and_click(d, text="Daftar dengan email atau nomor telepon"):
-            print("Tombol registrasi tidak ditemukan.")
-            return
+    # Step 1: Klik tombol 'Create new account' (by coordinate)
+    print("Klik tombol 'Create new account' (by coordinate)...")
+    d.click(450, 916)
+    time.sleep(3)
 
-    # Masukkan email/nomor telepon
-    print("Mengisi email...")
-    if wait_for(d, resourceId="com.instagram.lite:id/email"):
-        d(resourceId="com.instagram.lite:id/email").set_text(email)
-    else:
-        print("Field email tidak ditemukan, coba cek manual resourceId dengan UI Automator Viewer.")
-        return
+    # Step 2: Klik tombol 'Sign up with email' (by coordinate)
+    print("Klik tombol 'Sign up with email' (by coordinate)...")
+    d.click(450, 515)
+    time.sleep(3)
 
-    wait_and_click(d, text="Next") or wait_and_click(d, text="Berikutnya")
+    # Step 3: Isi email di field (className MultiAutoCompleteTextView)
+    print("Mengisi field email...")
+    d(className="android.widget.MultiAutoCompleteTextView").set_text(email)
+    time.sleep(1)
+
+    # Step 4: Klik tombol "Next" (by coordinate)
+    print("Klik tombol Next (by coordinate)...")
+    d.click(450, 485)
     time.sleep(2)
 
     # Isi nama lengkap
