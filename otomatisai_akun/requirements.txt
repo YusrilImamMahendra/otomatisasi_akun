@@ -1,4 +1,0 @@
-uiautomator2
-adbutils
-opencv-python
-requests
