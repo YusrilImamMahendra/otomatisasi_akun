@@ -70,12 +70,14 @@ def wait_for(d, text=None, resourceId=None, timeout=20):
 def get_verification_code_from_email(email_address, email_password, timeout=300):
     print("Mencari kode verifikasi di email (termasuk folder Sosial)...")
     start_time = time.time()
-    # Daftar folder yang akan dicoba
     folders = ['inbox', '[Gmail]/Social', '[Gmail]/Sosial', 'CATEGORY_SOCIAL']
     while time.time() - start_time < timeout:
         try:
             mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
             mail.login(email_address, email_password)
+            # Print semua folder untuk debug
+            status, allfolders = mail.list()
+            print(f"Semua folder IMAP: {allfolders}")
             email_found = False
             for folder in folders:
                 try:
@@ -84,7 +86,6 @@ def get_verification_code_from_email(email_address, email_password, timeout=300)
                         print(f"Folder {folder} tidak ditemukan atau gagal dibuka.")
                         continue
                     print(f"Mencari di folder: {folder}")
-                    # Lanjutkan search seperti biasa
                     result, data = mail.search(None, 'FROM "Instagram"')
                     if result == 'OK' and data[0]:
                         email_ids = data[0].split()
@@ -95,7 +96,19 @@ def get_verification_code_from_email(email_address, email_password, timeout=300)
                             if result == 'OK':
                                 raw_email = data[0][1]
                                 email_message = email.message_from_bytes(raw_email)
-                                # Ekstrak body email
+                                subject = email_message.get('Subject', '')
+                                print(f"Subject email: {subject}")
+
+                                # Cari kode di subject dulu
+                                match = re.search(r'\b(\d{6})\b', subject)
+                                if match:
+                                    verification_code = match.group(1)
+                                    print(f"Kode verifikasi ditemukan di subject: {verification_code}")
+                                    mail.close()
+                                    mail.logout()
+                                    return verification_code
+
+                                # Jika tidak, cek di body
                                 body = ""
                                 if email_message.is_multipart():
                                     for part in email_message.walk():
@@ -104,11 +117,11 @@ def get_verification_code_from_email(email_address, email_password, timeout=300)
                                             break
                                 else:
                                     body = email_message.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                print(f"Isi email (untuk debug): {body[:150]}")
+                                print(f"Isi email (untuk debug): {body[:200]}")
                                 match = re.search(r'\b(\d{6})\b', body)
                                 if match:
                                     verification_code = match.group(1)
-                                    print(f"Kode verifikasi ditemukan: {verification_code}")
+                                    print(f"Kode verifikasi ditemukan di body: {verification_code}")
                                     mail.close()
                                     mail.logout()
                                     return verification_code
