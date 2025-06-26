@@ -5,6 +5,7 @@ import uiautomator2 as u2
 import imaplib
 import email
 import re
+import uuid
 
 # Konfigurasi path dan device
 MUMU_EXE_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\MuMuPlayer.exe"
@@ -14,7 +15,7 @@ MUMU_DEVICE = "127.0.0.1:7555"
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "cobaja.1933@gmail.com"
 EMAIL_PASSWORD = "hpxifkmjcxzmjrrq"
-FULLNAME = "Nama Lengkap"
+FULLNAME = "yaboyunik12345"
 USERNAME = "usernameunik12345"
 PASSWORD = "PasswordKuat2025"
 
@@ -44,7 +45,7 @@ def unlock_screen():
     os.system(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell input keyevent 224')
     os.system(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell input keyevent 82')
 
-def wait_and_click(d, text=None, resourceId=None, timeout=20):
+def wait_and_click(d, text=None, resourceId=None, bounds=None, timeout=20):
     for _ in range(timeout):
         if text and d(text=text).exists:
             d(text=text).click()
@@ -52,15 +53,20 @@ def wait_and_click(d, text=None, resourceId=None, timeout=20):
         if resourceId and d(resourceId=resourceId).exists:
             d(resourceId=resourceId).click()
             return True
+        if bounds and d(className="android.view.ViewGroup", clickable=True, bounds=bounds).exists:
+            d(className="android.view.ViewGroup", clickable=True, bounds=bounds).click()
+            return True
         time.sleep(1)
-    print(f"Element {text or resourceId} not found.")
+    print(f"Element {text or resourceId or bounds} not found.")
     return False
 
-def wait_for(d, text=None, resourceId=None, timeout=20):
+def wait_for(d, text=None, resourceId=None, bounds=None, timeout=20):
     for _ in range(timeout):
         if text and d(text=text).exists:
             return True
         if resourceId and d(resourceId=resourceId).exists:
+            return True
+        if bounds and d(className="android.view.ViewGroup", clickable=True, bounds=bounds).exists:
             return True
         time.sleep(1)
     return False
@@ -123,7 +129,7 @@ def get_verification_code_from_email(email_address, email_password, timeout=300,
                                     if verification_code in exclude_codes:
                                         print(f"Kode {verification_code} sudah pernah dicoba, skip.")
                                         continue
-                                    print(f"Kode verifikasi ditemukan di body: {verification_code}")
+                                    print(f"KodeGeo verifikasi ditemukan di body: {verification_code}")
                                     mail.close()
                                     mail.logout()
                                     return verification_code
@@ -285,7 +291,7 @@ def handle_email_verification(d, max_attempts=3):
 
         if not success:
             print("Mencoba input dengan koordinat berdasarkan gambar...")
-            x, y = 450, 180
+            x, y = 450, 180  # Koordinat perkiraan untuk field kode
             d.click(x, y)
             time.sleep(1)
             d.long_click(x, y)
@@ -301,48 +307,51 @@ def handle_email_verification(d, max_attempts=3):
             print("Kode dimasukkan menggunakan koordinat")
             success = True
 
-        # PATCH: Setelah isi kode, klik Next/Verifikasi hingga benar-benar pindah halaman
-        for click_attempt in range(3):
-            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            if mac_fields.exists and ("_" in mac_fields[0].info.get("text", "")):
-                print(f"Percobaan klik tombol Next ke-{click_attempt+1} (field kode masih ada)...")
-                if d(text="Next").exists:
-                    d(text="Next").click()
-                elif d(text="Berikutnya").exists:
-                    d(text="Berikutnya").click()
-                else:
-                    d.click(450, 215)
-                time.sleep(2)
-            else:
-                print("Field kode sudah hilang, halaman berpindah.")
-                break
+        if success:
+            # Klik tombol Next dengan koordinat berdasarkan gambar
+            print("Mengklik tombol Next untuk mengirim kode verifikasi...")
+            next_x, next_y = 450, 400  # Koordinat perkiraan untuk tombol Next
+            d.click(next_x, next_y)
+            print("Tombol Next diklik berdasarkan koordinat.")
+            time.sleep(3)
 
-        # PATCH: Deteksi error: "That code isn't valid"
-        if d(textContains="That code isn't valid").exists:
-            print("Kode tidak valid, akan melakukan resend code.")
-            if d(text="I didn't get the code").exists:
-                d(text="I didn't get the code").click()
-                time.sleep(2)
-                # Pilih opsi "Resend confirmation code"
-                if d(text="Resend confirmation code").exists:
-                    d(text="Resend confirmation code").click()
-                    print("Opsi Resend confirmation code diklik, menunggu kode baru...")
-                    time.sleep(10)
+            # Cek apakah kode valid
+            if d(textContains="That code isn't valid").exists:
+                print("Kode tidak valid, akan melakukan resend code.")
+                # Klik "I didn't get the code" dengan teks atau koordinat
+                if wait_and_click(d, text="I didn't get the code", timeout=5):
+                    print("Tombol 'I didn't get the code' berhasil diklik.")
+                    time.sleep(2)
+                    # Klik "Resend confirmation code" dengan teks atau koordinat
+                    if wait_and_click(d, text="Resend confirmation code", timeout=5):
+                        print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
+                        time.sleep(10)  # Tunggu kode baru
+                        exclude_codes.append(verification_code)  # Tambahkan kode lama ke exclude_codes
+                        continue  # Ulangi proses dengan kode baru
+                    else:
+                        print("Opsi 'Resend confirmation code' tidak ditemukan!")
+                        return False
                 else:
-                    print("Opsi Resend confirmation code tidak ditemukan!")
-                    return False
+                    # Jika teks tidak ditemukan, coba koordinat default (sesuaikan berdasarkan UI)
+                    print("Tombol 'I didn't get the code' tidak ditemukan berdasarkan teks, mencoba koordinat...")
+                    d.click(450, 600)  # Koordinat perkiraan, sesuaikan jika perlu
+                    time.sleep(2)
+                    if wait_and_click(d, text="Resend confirmation code", timeout=5):
+                        print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
+                        time.sleep(10)
+                        exclude_codes.append(verification_code)
+                        continue
+                    else:
+                        print("Gagal menemukan atau mengklik 'Resend confirmation code'!")
+                        return False
             else:
-                print("Tombol I didn't get the code tidak ditemukan!")
-                return False
-            continue  # Ulangi proses dengan kode baru
-        else:
-            # Jika error tidak muncul, cek apakah sudah lanjut
-            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            if mac_fields.exists and ("_" in mac_fields[0].info.get("text", "")):
-                print("Masih di halaman verifikasi kode, kemungkinan kode salah.")
-                continue
-            print("Verifikasi email berhasil!")
-            return True
+                # Cek apakah sudah pindah ke halaman berikutnya
+                mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+                if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
+                    print("Masih di halaman verifikasi kode, kemungkinan kode salah.")
+                    continue
+                print("Verifikasi email berhasil!")
+                return True
 
     print("Gagal verifikasi kode setelah beberapa percobaan.")
     return False
@@ -384,23 +393,14 @@ def debug_screen_elements(d):
 
 def check_instagram_lite_installed():
     print("Mengecek apakah Instagram Lite sudah terinstall...")
-    d = u2.connect(MUMU_DEVICE)
     try:
-        d.app_start("com.instagram.lite")
-        time.sleep(3)
-        print("Instagram Lite sudah terinstall!")
-        d.app_stop("com.instagram.lite")
-        time.sleep(1)
-        return True
-    except Exception as e:
-        print(f"Instagram Lite belum terinstall: {e}")
-    try:
-        result = subprocess.getoutput(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell pm list packages | grep com.instagram.lite')
+        result = subprocess.getoutput(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell pm list packages com.instagram.lite')
+        print(f"Hasil ADB: {result}")
         if "com.instagram.lite" in result:
-            print("Instagram Lite sudah terinstall (detected via ADB)!")
+            print("Instagram Lite sudah terinstall.")
             return True
     except Exception as e:
-        print(f"Error checking via ADB: {e}")
+        print(f"Error saat mengecek aplikasi terinstall: {e}")
     print("Instagram Lite belum terinstall.")
     return False
 
@@ -512,17 +512,27 @@ def register_instagram_lite(email, fullname, username, password):
         time.sleep(1)
 
     # Lanjut pengisian data akun
-    for step in range(5):
-        print("Mencari dan mengisi field nama lengkap...")
+    max_attempts = 5
+    for step in range(max_attempts):
+        print(f"Mencari dan mengisi field nama lengkap (percobaan {step + 1}/{max_attempts})...")
         if wait_for(d, resourceId="com.instagram.lite:id/full_name", timeout=5):
             fullname_field = d(resourceId="com.instagram.lite:id/full_name")
             fullname_field.clear_text()
             fullname_field.set_text(fullname)
             time.sleep(1)
         else:
-            print("Field nama lengkap tidak ditemukan, tunggu ulang...")
-            time.sleep(2)
-            continue
+            print("Field nama lengkap tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
+            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+            if mac_fields.exists and mac_fields.count > 0:
+                fullname_field = mac_fields[0]  # Ambil field pertama sebagai nama lengkap
+                fullname_field.clear_text()
+                fullname_field.set_text(fullname)
+                time.sleep(1)
+                print(f"Field nama lengkap diisi dengan '{fullname}' menggunakan MultiAutoCompleteTextView.")
+            else:
+                print("Field nama lengkap tidak ditemukan, lanjut ke langkah berikutnya setelah percobaan...")
+                if step == max_attempts - 1:  # Jika sudah maksimal percobaan
+                    break
 
         print("Mengisi username...")
         if wait_for(d, resourceId="com.instagram.lite:id/username", timeout=5):
@@ -531,9 +541,17 @@ def register_instagram_lite(email, fullname, username, password):
             username_field.set_text(username)
             time.sleep(1)
         else:
-            print("Field username tidak ditemukan, tunggu ulang...")
-            time.sleep(2)
-            continue
+            print("Field username tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
+            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+            if mac_fields.exists and mac_fields.count > 1:
+                username_field = mac_fields[1]  # Ambil field kedua sebagai username
+                username_field.clear_text()
+                username_field.set_text(username)
+                time.sleep(1)
+                print(f"Field username diisi dengan '{username}' menggunakan MultiAutoCompleteTextView.")
+            else:
+                print("Field username tidak ditemukan, lanjut ke langkah berikutnya...")
+                break
 
         print("Mengisi password...")
         if wait_for(d, resourceId="com.instagram.lite:id/password", timeout=5):
@@ -542,14 +560,23 @@ def register_instagram_lite(email, fullname, username, password):
             password_field.set_text(password)
             time.sleep(1)
         else:
-            print("Field password tidak ditemukan, tunggu ulang...")
-            time.sleep(2)
-            continue
+            print("Field password tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
+            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+            if mac_fields.exists and mac_fields.count > 2:
+                password_field = mac_fields[2]  # Ambil field ketiga sebagai password
+                password_field.clear_text()
+                password_field.set_text(password)
+                time.sleep(1)
+                print(f"Field password diisi dengan '{password}' menggunakan MultiAutoCompleteTextView.")
+            else:
+                print("Field password tidak ditemukan, lanjut ke langkah berikutnya...")
+                break
 
         print("Klik Next untuk melanjutkan registrasi...")
         if not (wait_and_click(d, text="Next") or wait_and_click(d, text="Berikutnya")):
-            print("Tombol Next tidak ditemukan, mencoba koordinat...")
-            d.click(450, 600)
+            print("Tombol Next tidak ditemukan berdasarkan teks, mencoba koordinat...")
+            d.click(450, 513)  # Koordinat tengah dari bounds [18,480][882,546]
+            print("Tombol Next diklik berdasarkan koordinat.")
         time.sleep(3)
 
         # PATCH: Jika masih ada verifikasi email di belakang, handle lagi!
@@ -561,6 +588,11 @@ def register_instagram_lite(email, fullname, username, password):
 
         print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
         return
+
+    print("Gagal mengisi semua field setelah beberapa percobaan, mencoba klik Next...")
+    d.click(450, 513)  # Coba klik Next meskipun field tidak terdeteksi semua
+    time.sleep(3)
+    print("Registrasi selesai atau gagal, periksa manual jika perlu.")
 
 def main():
     start_mumu()
