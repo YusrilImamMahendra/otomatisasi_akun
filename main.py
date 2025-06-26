@@ -6,6 +6,7 @@ import imaplib
 import email
 import re
 import uuid
+import random
 
 # Konfigurasi path dan device
 MUMU_EXE_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\MuMuPlayer.exe"
@@ -390,6 +391,56 @@ def debug_screen_elements(d):
                 print(f"Elemen dengan '{keyword}': {elements.count} ditemukan")
     except Exception as e:
         print(f"Error saat debug: {e}")
+        import random
+
+def set_birthday(d, min_year=1980, max_year=2004):
+    print("Mendeteksi dan mengisi tanggal lahir (acak)...")
+    # Pilih tahun, bulan, tanggal secara random
+    year = random.randint(min_year, max_year)
+    month = random.randint(1, 12)
+    # Untuk hari, tentukan jumlah hari di bulan & tahun tsb
+    if month == 2:
+        if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
+            max_day = 29
+        else:
+            max_day = 28
+    elif month in [4, 6, 9, 11]:
+        max_day = 30
+    else:
+        max_day = 31
+    day = random.randint(1, max_day)
+
+    # Koordinat picker, sesuaikan dengan resolusi emulator Anda
+    day_x, month_x, year_x = 150, 450, 750
+    picker_y = 1350
+
+    # Helper swipe picker
+    def swipe_picker(x, current, target):
+        offset_per_item = 70
+        diff = target - current
+        direction = -1 if diff > 0 else 1
+        for _ in range(abs(diff)):
+            d.swipe(x, picker_y, x, picker_y + direction * offset_per_item, 0.15)
+            time.sleep(0.2)
+
+    # Anggap posisi awal sesuai tampilan default picker
+    # Cek tahun default di picker (misal: 2025, dari screenshot), sesuaikan jika berbeda
+    default_year = 2025
+    default_month = 6
+    default_day = 26
+
+    # Swipe ke tahun, bulan, hari yang diinginkan
+    swipe_picker(year_x, default_year, year)
+    swipe_picker(month_x, default_month, month)
+    swipe_picker(day_x, default_day, day)
+
+    print(f"Tanggal lahir dipilih: {day:02d}-{month:02d}-{year}")
+
+    # Klik Next pada picker
+    next_x, next_y = 450, 1550
+    d.click(next_x, next_y)
+    print("Tombol Next (Birthday) diklik.")
+    time.sleep(2)
 
 def check_instagram_lite_installed():
     print("Mengecek apakah Instagram Lite sudah terinstall...")
@@ -579,13 +630,12 @@ def register_instagram_lite(email, fullname, username, password):
             print("Tombol Next diklik berdasarkan koordinat.")
         time.sleep(3)
 
-        # PATCH: Jika masih ada verifikasi email di belakang, handle lagi!
-        print("Cek apakah ada halaman verifikasi email lagi setelah isi data...")
-        if d(className="android.widget.MultiAutoCompleteTextView").exists and "_" in d(className="android.widget.MultiAutoCompleteTextView")[0].info.get('text', ''):
-            print("Ditemukan halaman verifikasi kode lagi, handle ulang...")
-            handle_email_verification(d)
-            print("Registrasi: handle_email_verification kedua selesai.")
-
+        if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
+            set_birthday(d)
+        time.sleep(3)
+        if d(textContains="Your account has been created").exists:
+            print("Akun berhasil dibuat!")
+            break
         print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
         return
 
