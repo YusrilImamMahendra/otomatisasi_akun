@@ -393,10 +393,8 @@ def debug_screen_elements(d):
 
 def set_birthday(d, min_year=1980, max_year=2004):
     print("Mendeteksi dan mengisi tanggal lahir (acak)...")
-    # Pilih tahun, bulan, tanggal secara random
     year = random.randint(min_year, max_year)
     month = random.randint(1, 12)
-    # Untuk hari, tentukan jumlah hari di bulan & tahun tsb
     if month == 2:
         if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
             max_day = 29
@@ -408,11 +406,10 @@ def set_birthday(d, min_year=1980, max_year=2004):
         max_day = 31
     day = random.randint(1, max_day)
 
-    # Koordinat picker, sesuaikan dengan resolusi emulator Anda
+    # Koordinat picker
     day_x, month_x, year_x = 150, 450, 750
     picker_y = 1350
 
-    # Helper swipe picker
     def swipe_picker(x, current, target):
         offset_per_item = 70
         diff = target - current
@@ -421,20 +418,16 @@ def set_birthday(d, min_year=1980, max_year=2004):
             d.swipe(x, picker_y, x, picker_y + direction * offset_per_item, 0.15)
             time.sleep(0.2)
 
-    # Anggap posisi awal sesuai tampilan default picker
-    # Cek tahun default di picker (misal: 2025, dari screenshot), sesuaikan jika berbeda
     default_year = 2025
     default_month = 6
     default_day = 26
 
-    # Swipe ke tahun, bulan, hari yang diinginkan
     swipe_picker(year_x, default_year, year)
     swipe_picker(month_x, default_month, month)
     swipe_picker(day_x, default_day, day)
 
     print(f"Tanggal lahir dipilih: {day:02d}-{month:02d}-{year}")
 
-    # Klik Next pada picker
     next_x, next_y = 450, 1550
     d.click(next_x, next_y)
     print("Tombol Next (Birthday) diklik.")
@@ -514,19 +507,15 @@ def register_instagram_lite(email, fullname, password):
     print("Mencari tombol Next...")
     next_clicked = False
     if d(text="Next").exists:
-        print("Mengklik tombol Next berdasarkan text...")
         d(text="Next").click()
         next_clicked = True
     elif d(text="Berikutnya").exists:
-        print("Mengklik tombol Berikutnya...")
         d(text="Berikutnya").click()
         next_clicked = True
     elif d(textContains="Next").exists:
-        print("Mengklik tombol yang mengandung Next...")
         d(textContains="Next").click()
         next_clicked = True
     elif d(resourceId="com.instagram.lite:id/next_button").exists:
-        print("Mengklik tombol Next berdasarkan resource ID...")
         d(resourceId="com.instagram.lite:id/next_button").click()
         next_clicked = True
     else:
@@ -541,6 +530,7 @@ def register_instagram_lite(email, fullname, password):
         print("Gagal menemukan tombol Next!")
         return
 
+    # PATCH: Deteksi flow verifikasi kode di awal
     print("Cek apakah langsung masuk ke halaman verifikasi kode...")
     for _ in range(10):
         mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
@@ -559,63 +549,49 @@ def register_instagram_lite(email, fullname, password):
             break
         time.sleep(1)
 
-    # Lanjut pengisian data akun
-    for step in range(5):
-        print(f"Mencari dan mengisi field nama lengkap & password (percobaan {step + 1}/5)...")
+    # ISI FULL NAME & PASSWORD
+    print("Mencari dan mengisi field nama lengkap & password...")
+    for _ in range(10):
         mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
         if mac_fields.exists and mac_fields.count >= 2:
-            # index=0: nama, index=1: password (per XML urutan index:4 dan index:7 di list, jadi urut ke-0 dan ke-1)
             name_field = mac_fields[0]
             pass_field = mac_fields[1]
-            # Cek dan isi nama jika belum sesuai
-            current_name = name_field.info.get("text", "")
-            if current_name != fullname:
-                name_field.clear_text()
-                name_field.set_text(fullname)
-                time.sleep(1)
-                print(f"Field nama lengkap diisi dengan '{fullname}'.")
-            else:
-                print("Field nama lengkap sudah sesuai, tidak diubah.")
-            # Cek dan isi password jika belum sesuai
-            current_pass = pass_field.info.get("text", "")
-            # Password field biasanya akan ter-enkripsi (••••••••), jadi tetap isi saja untuk memastikan
+            name_field.click()
+            name_field.clear_text()
+            name_field.set_text(fullname)
+            time.sleep(1)
+            print(f"Field nama lengkap diisi dengan '{fullname}'.")
+            pass_field.click()
             pass_field.clear_text()
             pass_field.set_text(password)
             time.sleep(1)
             print("Field password diisi.")
-        else:
-            print("Field nama lengkap/password tidak ditemukan! Cek UI.")
-            return
-
-        # Klik Next
-        print("Klik Next untuk melanjutkan registrasi...")
-        if d(text="Next").exists:
-            d(text="Next").click()
-        elif d(text="Berikutnya").exists:
-            d(text="Berikutnya").click()
-        else:
-            # Klik berdasarkan koordinat tombol Next (dari XML: [18,480][882,546], klik tengah)
-            d.click(450, 513)
-        time.sleep(3)
-
-        # Setelah klik Next, cek apakah sudah masuk halaman birthday atau halaman berikutnya
-        if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
-            set_birthday(d)
-            time.sleep(3)
-            print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
-            return
-        # Atau deteksi sudah tidak ada tombol Next = sukses
-        if not (d(text="Next").exists or d(text="Berikutnya").exists):
-            print("Tombol Next sudah tidak ada, kemungkinan sudah lanjut halaman berikutnya.")
             break
-
-    print("Selesai pengisian nama/password, cek apakah ada halaman birthday...")
-    if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
-        set_birthday(d)
-        time.sleep(3)
-        print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
+        print("Field nama lengkap/password belum muncul, menunggu...")
+        time.sleep(1)
+    else:
+        print("Field nama lengkap/password tidak ditemukan! Cek UI.")
         return
-    print("Registrasi selesai atau gagal, periksa manual jika perlu.")
+
+    # KLIK NEXT setelah isi name & password
+    print("Klik Next untuk melanjutkan registrasi...")
+    if d(text="Next").exists:
+        d(text="Next").click()
+        print("Tombol Next diklik berdasarkan text.")
+    elif d(text="Berikutnya").exists:
+        d(text="Berikutnya").click()
+        print("Tombol Berikutnya diklik.")
+    else:
+        d.click(450, 513)
+        print("Tombol Next diklik berdasarkan koordinat.")
+    time.sleep(3)
+
+    # Setelah klik Next, HALAMAN BIRTHDAY PASTI MUNCUL
+    print("Masuk ke halaman birthday, mengisi tanggal lahir...")
+    set_birthday(d)
+    time.sleep(3)
+    print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
+    return
 
 def main():
     start_mumu()
