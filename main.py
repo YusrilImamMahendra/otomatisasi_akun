@@ -444,6 +444,28 @@ def set_birthday(d, min_year=1980, max_year=2004):
     d.click(next_x, next_y)
     print("Tombol Next (Birthday) diklik.")
     time.sleep(2)
+    
+def handle_permission_popup(d, timeout=10):
+    """
+    Otomatis klik tombol IZINKAN jika pop up perizinan muncul.
+    """
+    for _ in range(timeout):
+        # Cek dengan text Bahasa Indonesia
+        if d(text="IZINKAN").exists:
+            print("Pop up perizinan terdeteksi, mengklik 'IZINKAN'...")
+            d(text="IZINKAN").click()
+            time.sleep(1)
+            # Tunggu sejenak jika ada pop up berikutnya
+            continue
+        # Cek dengan text Bahasa Inggris (untuk jaga-jaga)
+        elif d(text="ALLOW").exists:
+            print("Permission pop up detected, clicking 'ALLOW'...")
+            d(text="ALLOW").click()
+            time.sleep(1)
+            continue
+        else:
+            time.sleep(1)
+    print("Handle permission pop up selesai atau tidak ditemukan.")
 
 def check_instagram_lite_installed():
     print("Mengecek apakah Instagram Lite sudah terinstall...")
