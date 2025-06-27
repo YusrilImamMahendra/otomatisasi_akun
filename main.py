@@ -8,10 +8,10 @@ import re
 import uuid
 import random
 
-# Konfigurasi path dan device
+# Konfigurasi path dan device untuk LDPlayer
 LDPLAYER_EXE_PATH = r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
 ADB_PATH = r"C:\LDPlayer\LDPlayer9\adb.exe"
-LDPLAYER_DEVICE = "127.0.0.1:5555"
+LDPLAYER_DEVICE = "127.0.0.1:5555"  # Port default LDPlayer, cek dengan 'adb devices'
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "cobaja.1933@gmail.com"
@@ -23,10 +23,11 @@ PASSWORD = "PasswordKuat2025"
 IMAP_SERVER = "imap.gmail.com"
 IMAP_PORT = 993
 
-def start_ldplayer():
+def start_ldplayer_and_connect_adb():
     print("Menjalankan emulator LDPlayer...")
     subprocess.Popen([LDPLAYER_EXE_PATH])
-    while True:
+    # Tunggu emulator benar-benar berjalan
+    for _ in range(60):  # max 3 menit
         out = subprocess.getoutput(f'"{ADB_PATH}" devices')
         print("ADB devices output:", out)
         lines = out.splitlines()
@@ -36,9 +37,19 @@ def start_ldplayer():
                 ready = True
                 break
         if ready:
-            print("Emulator siap!")
-            break
+            print("Emulator siap, adb sudah terhubung!")
+            return
+        # Cek jika device belum muncul, coba hubungkan manual via adb connect
+        if not any(LDPLAYER_DEVICE in line for line in lines):
+            print("ADB belum terhubung ke emulator, mencoba adb connect...")
+            os.system(f'"{ADB_PATH}" connect {LDPLAYER_DEVICE}')
         time.sleep(3)
+    print("Gagal mendapatkan koneksi ADB ke emulator!")
+
+def unlock_screen():
+    print("Membuka kunci layar (jika terkunci)...")
+    os.system(f'"{ADB_PATH}" -s {LDPLAYER_DEVICE} shell input keyevent 224')
+    os.system(f'"{ADB_PATH}" -s {LDPLAYER_DEVICE} shell input keyevent 82')
 
 def wait_and_click(d, text=None, resourceId=None, bounds=None, timeout=20):
     for _ in range(timeout):
@@ -473,19 +484,17 @@ def install_instagram_lite():
     d.app_start("com.android.vending")
     time.sleep(4)
     print("Klik search bar di bagian atas (LDPlayer)...")
-    d.click(350, 60)  # Koordinat search bar, cek di LDPlayer-mu
+    d.click(350, 60)  # Koordinat search bar Play Store LDPlayer, sesuaikan jika perlu!
     time.sleep(2)
-    print("Ketik 'Instagram Lite'...")
     d.send_keys("Instagram Lite")
     time.sleep(1)
-    print("Tekan tombol Enter pada keyboard virtual...")
     d.press("enter")
     time.sleep(3)
     print("Klik hasil aplikasi 'Instagram Lite' pada hasil pencarian...")
-    d.click(400, 570)
+    d.click(400, 300)  # Sesuaikan dengan posisi hasil di LDPlayer
     time.sleep(2)
     print("Klik tombol Install di panel kanan...")
-    d.click(1160, 390)
+    d.click(1100, 390)  # Sesuaikan jika letak tombol install berbeda
     time.sleep(2)
     print("Menunggu proses install selesai (tombol Buka muncul)...")
     for _ in range(60):
@@ -553,7 +562,6 @@ def register_instagram_lite(email, fullname, password):
             print("Halaman verifikasi kode terdeteksi, mengeksekusi handle_email_verification ...")
             verif_ok = handle_email_verification(d)
             print("Registrasi: handle_email_verification selesai. Melanjutkan isi nama lengkap & password.")
-            # PATCH: Setelah handle_email_verification, tunggu sampai field kode hilang benar2
             for _ in range(15):
                 mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
                 if not (mac_fields.exists and "_" in mac_fields[0].info.get("text", "")):
@@ -564,7 +572,6 @@ def register_instagram_lite(email, fullname, password):
             break
         time.sleep(1)
 
-    # ISI FULL NAME & PASSWORD
     print("Mencari dan mengisi field nama lengkap & password...")
     for _ in range(10):
         mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
@@ -588,7 +595,6 @@ def register_instagram_lite(email, fullname, password):
         print("Field nama lengkap/password tidak ditemukan! Cek UI.")
         return
 
-    # KLIK NEXT setelah isi name & password
     print("Klik Next untuk melanjutkan registrasi...")
     if d(text="Next").exists:
         d(text="Next").click()
@@ -601,7 +607,6 @@ def register_instagram_lite(email, fullname, password):
         print("Tombol Next diklik berdasarkan koordinat.")
     time.sleep(3)
 
-    # Setelah klik Next, HALAMAN BIRTHDAY PASTI MUNCUL
     print("Masuk ke halaman birthday, mengisi tanggal lahir...")
     set_birthday(d)
     time.sleep(3)
@@ -609,7 +614,8 @@ def register_instagram_lite(email, fullname, password):
     return
 
 def main():
-    start_ldplayer()
+    start_ldplayer_and_connect_adb()
+    unlock_screen()
     print("Menunggu 10 detik sebelum memulai automasi...")
     time.sleep(10)
     if check_instagram_lite_installed():
