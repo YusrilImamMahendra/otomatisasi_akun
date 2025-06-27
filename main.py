@@ -602,12 +602,31 @@ def register_instagram_lite(email, fullname, password):
     print("Membuka aplikasi Instagram Lite...")
     d.app_start("com.instagram.lite")
     time.sleep(5)
-    print("Klik tombol 'Create new account' (by coordinate)...")
-    d.click(450, 916)
-    time.sleep(3)
-    print("Klik tombol 'Sign up with email' (by coordinate)...")
-    d.click(450, 515)
-    time.sleep(3)
+    handle_permission_popup(d)
+
+    print("Klik tombol 'Create new account' (by text/XPath)...")
+    if d(text="Create new account").exists:
+        d(text="Create new account").click()
+        time.sleep(2)
+    elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]').exists:
+        d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]').click()
+        time.sleep(2)
+    else:
+        print("Tombol 'Create new account' tidak ditemukan! (text/XPath)")
+        debug_screen_elements(d)
+        return
+
+    print("Klik tombol 'Sign up with email' (by text/XPath)...")
+    if d(text="Sign up with email").exists:
+        d(text="Sign up with email").click()
+        time.sleep(2)
+    elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]').exists:
+        d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]').click()
+        time.sleep(2)
+    else:
+        print("Tombol 'Sign up with email' tidak ditemukan! (text/XPath)")
+        debug_screen_elements(d)
+        return
     print("Mengisi field email...")
     email_field = d(className="android.widget.MultiAutoCompleteTextView")
     if email_field.exists:
