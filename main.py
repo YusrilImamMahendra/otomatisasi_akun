@@ -390,7 +390,6 @@ def debug_screen_elements(d):
                 print(f"Elemen dengan '{keyword}': {elements.count} ditemukan")
     except Exception as e:
         print(f"Error saat debug: {e}")
-        import random
 
 def set_birthday(d, min_year=1980, max_year=2004):
     print("Mendeteksi dan mengisi tanggal lahir (acak)...")
@@ -549,7 +548,7 @@ def register_instagram_lite(email, fullname, password):
         if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
             print("Halaman verifikasi kode terdeteksi, mengeksekusi handle_email_verification ...")
             verif_ok = handle_email_verification(d)
-            print("Registrasi: handle_email_verification selesai. Melanjutkan isi nama lengkap, username, password.")
+            print("Registrasi: handle_email_verification selesai. Melanjutkan isi nama lengkap & password.")
             # PATCH: Setelah handle_email_verification, tunggu sampai field kode hilang benar2
             for _ in range(15):
                 mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
@@ -562,11 +561,9 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
 
     # Lanjut pengisian data akun
-
     max_attempts = 5
     for step in range(max_attempts):
         print(f"Mencari dan mengisi field nama lengkap (percobaan {step + 1}/{max_attempts})...")
-        # Fullname
         if wait_for(d, resourceId="com.instagram.lite:id/full_name", timeout=5):
             fullname_field = d(resourceId="com.instagram.lite:id/full_name")
             fullname_field.clear_text()
@@ -586,7 +583,6 @@ def register_instagram_lite(email, fullname, password):
                 if step == max_attempts - 1:
                     break
 
-        # Password
         print("Mengisi password...")
         if wait_for(d, resourceId="com.instagram.lite:id/password", timeout=5):
             password_field = d(resourceId="com.instagram.lite:id/password")
@@ -620,10 +616,18 @@ def register_instagram_lite(email, fullname, password):
             print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
             return
 
+    # Setelah loop, antisipasi jika tetap masuk ke birthday
+    if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
+        set_birthday(d)
+        time.sleep(3)
+        print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
+        return
+
     print("Gagal mengisi semua field setelah beberapa percobaan, mencoba klik Next...")
     d.click(450, 513)
     time.sleep(3)
     print("Registrasi selesai atau gagal, periksa manual jika perlu.")
+
 def main():
     start_mumu()
     unlock_screen()
