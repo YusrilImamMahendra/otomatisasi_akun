@@ -489,7 +489,7 @@ def install_instagram_lite():
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
     return False
 
-def register_instagram_lite(email, fullname, username, password):
+def register_instagram_lite(email, fullname, password):
     d = u2.connect(MUMU_DEVICE)
     print("Membuka aplikasi Instagram Lite...")
     d.app_start("com.instagram.lite")
