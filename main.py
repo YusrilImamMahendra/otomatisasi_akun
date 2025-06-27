@@ -541,7 +541,6 @@ def register_instagram_lite(email, fullname, password):
         print("Gagal menemukan tombol Next!")
         return
 
-    # PATCH: Deteksi flow verifikasi kode di awal
     print("Cek apakah langsung masuk ke halaman verifikasi kode...")
     for _ in range(10):
         mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
@@ -561,71 +560,61 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
 
     # Lanjut pengisian data akun
-    max_attempts = 5
-    for step in range(max_attempts):
-        print(f"Mencari dan mengisi field nama lengkap (percobaan {step + 1}/{max_attempts})...")
-        if wait_for(d, resourceId="com.instagram.lite:id/full_name", timeout=5):
-            fullname_field = d(resourceId="com.instagram.lite:id/full_name")
-            fullname_field.clear_text()
-            fullname_field.set_text(fullname)
-            time.sleep(1)
-        else:
-            print("Field nama lengkap tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
-            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            if mac_fields.exists and mac_fields.count > 0:
-                fullname_field = mac_fields[0]
-                fullname_field.clear_text()
-                fullname_field.set_text(fullname)
+    for step in range(5):
+        print(f"Mencari dan mengisi field nama lengkap & password (percobaan {step + 1}/5)...")
+        mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+        if mac_fields.exists and mac_fields.count >= 2:
+            # index=0: nama, index=1: password (per XML urutan index:4 dan index:7 di list, jadi urut ke-0 dan ke-1)
+            name_field = mac_fields[0]
+            pass_field = mac_fields[1]
+            # Cek dan isi nama jika belum sesuai
+            current_name = name_field.info.get("text", "")
+            if current_name != fullname:
+                name_field.clear_text()
+                name_field.set_text(fullname)
                 time.sleep(1)
-                print(f"Field nama lengkap diisi dengan '{fullname}' menggunakan MultiAutoCompleteTextView.")
+                print(f"Field nama lengkap diisi dengan '{fullname}'.")
             else:
-                print("Field nama lengkap tidak ditemukan, lanjut ke langkah berikutnya setelah percobaan...")
-                if step == max_attempts - 1:
-                    break
-
-        print("Mengisi password...")
-        if wait_for(d, resourceId="com.instagram.lite:id/password", timeout=5):
-            password_field = d(resourceId="com.instagram.lite:id/password")
-            password_field.clear_text()
-            password_field.set_text(password)
+                print("Field nama lengkap sudah sesuai, tidak diubah.")
+            # Cek dan isi password jika belum sesuai
+            current_pass = pass_field.info.get("text", "")
+            # Password field biasanya akan ter-enkripsi (••••••••), jadi tetap isi saja untuk memastikan
+            pass_field.clear_text()
+            pass_field.set_text(password)
             time.sleep(1)
+            print("Field password diisi.")
         else:
-            print("Field password tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
-            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            if mac_fields.exists and mac_fields.count > 1:
-                password_field = mac_fields[1]
-                password_field.clear_text()
-                password_field.set_text(password)
-                time.sleep(1)
-                print(f"Field password diisi dengan '{password}' menggunakan MultiAutoCompleteTextView.")
-            else:
-                print("Field password tidak ditemukan, lanjut ke langkah berikutnya...")
-                break
+            print("Field nama lengkap/password tidak ditemukan! Cek UI.")
+            return
 
+        # Klik Next
         print("Klik Next untuk melanjutkan registrasi...")
-        if not (wait_and_click(d, text="Next") or wait_and_click(d, text="Berikutnya")):
-            print("Tombol Next tidak ditemukan berdasarkan teks, mencoba koordinat...")
+        if d(text="Next").exists:
+            d(text="Next").click()
+        elif d(text="Berikutnya").exists:
+            d(text="Berikutnya").click()
+        else:
+            # Klik berdasarkan koordinat tombol Next (dari XML: [18,480][882,546], klik tengah)
             d.click(450, 513)
-            print("Tombol Next diklik berdasarkan koordinat.")
         time.sleep(3)
 
-        # Setelah klik next, cek halaman birthday
+        # Setelah klik Next, cek apakah sudah masuk halaman birthday atau halaman berikutnya
         if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
             set_birthday(d)
             time.sleep(3)
             print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
             return
+        # Atau deteksi sudah tidak ada tombol Next = sukses
+        if not (d(text="Next").exists or d(text="Berikutnya").exists):
+            print("Tombol Next sudah tidak ada, kemungkinan sudah lanjut halaman berikutnya.")
+            break
 
-    # Setelah loop, antisipasi jika tetap masuk ke birthday
+    print("Selesai pengisian nama/password, cek apakah ada halaman birthday...")
     if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
         set_birthday(d)
         time.sleep(3)
         print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
         return
-
-    print("Gagal mengisi semua field setelah beberapa percobaan, mencoba klik Next...")
-    d.click(450, 513)
-    time.sleep(3)
     print("Registrasi selesai atau gagal, periksa manual jika perlu.")
 
 def main():
