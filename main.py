@@ -494,9 +494,10 @@ def set_birthday(d, min_age=18, max_age=30):
         return
 
     # 2. Tunggu pop up 'Enter your real birthday' dan klik OK
+    xpath_OK = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup'
     for _ in range(10):
-        if d(text="OK").exists:
-            d(text="OK").click()
+        if d.xpath(xpath_OK).exists:
+            d.xpath(xpath_OK).click()
             print("Pop up 'Enter your real birthday' ditemukan dan tombol OK diklik.")
             time.sleep(1)
             break
@@ -505,16 +506,28 @@ def set_birthday(d, min_age=18, max_age=30):
         print("Pop up OK tidak muncul.")
 
     # 3. Tunggu tombol "Enter age instead" muncul, lalu klik (XPath)
-    xpath_enter_age = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup'
+    xpath_enter_age = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.View[6]'
     for _ in range(10):
         if d.xpath(xpath_enter_age).exists:
-            d.xpath(xpath_enter_age).click()
-            print("Tombol 'Enter age instead' diklik.")
-            time.sleep(1)
-            break
+            # kadang tombol tidak langsung bisa di-klik, pastikan visible dan enabled
+            try:
+                d.xpath(xpath_enter_age).click()
+                print("Tombol 'Enter age instead' diklik.")
+                time.sleep(2)
+                break
+            except Exception as e:
+                print(f"Klik xpath tombol 'Enter age instead' gagal: {e}")
+        else:
+            # Coba klik berdasarkan text juga jika ada
+            if d(text="Enter age instead").exists:
+                d(text="Enter age instead").click()
+                print("Tombol 'Enter age instead' diklik by text.")
+                time.sleep(2)
+                break
         time.sleep(1)
     else:
         print("Tombol 'Enter age instead' tidak ditemukan!")
+        debug_screen_elements(d)
         return
 
     # 4. Isi usia di halaman "Enter your age"
@@ -522,6 +535,10 @@ def set_birthday(d, min_age=18, max_age=30):
         age_field = d(className="android.widget.EditText")
         if age_field.exists:
             age = str(random.randint(min_age, max_age))
+            age_field.click()  # Fokuskan dulu
+            time.sleep(0.5)
+            age_field.clear_text()
+            time.sleep(0.5)
             age_field.set_text(age)
             print(f"Field usia diisi dengan: {age}")
             time.sleep(1)
@@ -529,6 +546,7 @@ def set_birthday(d, min_age=18, max_age=30):
         time.sleep(1)
     else:
         print("Field usia tidak ditemukan!")
+        debug_screen_elements(d)
         return
 
     # 5. Klik tombol Next lagi (umumnya text "Next" atau "Berikutnya")
@@ -543,9 +561,16 @@ def set_birthday(d, min_age=18, max_age=30):
             print("Tombol Berikutnya diklik setelah isi usia.")
             time.sleep(1)
             break
+        # Coba klik via xpath pada halaman ini juga
+        elif d.xpath(xpath_next).exists:
+            d.xpath(xpath_next).click()
+            print("Tombol Next (xpath) diklik setelah isi usia.")
+            time.sleep(1)
+            break
         time.sleep(1)
     else:
         print("Tombol Next/ Berikutnya tidak ditemukan setelah isi usia!")
+        debug_screen_elements(d)
 
     print("Birthday selesai diisi dengan metode Enter age instead.")
 
@@ -627,8 +652,8 @@ def register_instagram_lite(email, fullname, password):
     if d(text="Create new account").exists:
         d(text="Create new account").click()
         time.sleep(2)
-    elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]').exists:
-        d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]').click()
+    elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[1]').exists:
+        d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[1]').click()
         time.sleep(2)
     else:
         print("Tombol 'Create new account' tidak ditemukan! (text/XPath)")
