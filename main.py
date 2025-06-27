@@ -775,7 +775,40 @@ def register_instagram_lite(email, fullname, password):
 
     print("Masuk ke halaman birthday, mengisi tanggal lahir...")
     set_birthday(d)
+    
+    xpath_next_ready = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[6]'
+    for _ in range(10):
+        if d.xpath(xpath_next_ready).exists:
+            d.xpath(xpath_next_ready).click()
+            print("Tombol Next pada halaman 'account is almost ready' berhasil diklik via xpath.")
+            time.sleep(2)
+            break
+        elif d(text="Next").exists:
+            d(text="Next").click()
+            print("Tombol Next diklik via text.")
+            time.sleep(2)
+            break
+        time.sleep(1)
+    else:
+        print("Tombol Next pada halaman 'account is almost ready' tidak ditemukan!")
     time.sleep(3)
+    
+    xpath_skip_contacts = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    for _ in range(10):
+        if d.xpath(xpath_skip_contacts).exists:
+            d.xpath(xpath_skip_contacts).click()
+            print("Tombol Skip pada halaman sync kontak berhasil diklik via xpath.")
+            time.sleep(2)
+            break
+        elif d(text="Skip").exists:
+            d(text="Skip").click()
+            print("Tombol Skip diklik via text.")
+            time.sleep(2)
+            break
+        time.sleep(1)
+    else:
+        print("Tombol Skip pada halaman sync kontak tidak ditemukan!")
+        
     print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
     return
 
