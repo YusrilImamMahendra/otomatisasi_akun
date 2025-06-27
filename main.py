@@ -392,42 +392,67 @@ def debug_screen_elements(d):
         print(f"Error saat debug: {e}")
 
 def set_birthday(d, min_year=1980, max_year=2004):
-    print("Mendeteksi dan mengisi tanggal lahir (acak)...")
+    print("Mendeteksi dan mengisi tanggal lahir (acak, metode klik RecyclerView)...")
+    # Pilih tanggal random
     year = random.randint(min_year, max_year)
     month = random.randint(1, 12)
+    # Hari maksimal sesuai bulan & tahun (leap year)
     if month == 2:
-        if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
-            max_day = 29
-        else:
-            max_day = 28
+        max_day = 29 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 28
     elif month in [4, 6, 9, 11]:
         max_day = 30
     else:
         max_day = 31
     day = random.randint(1, max_day)
+    print(f"Target birthday: {day:02d}-{month:02d}-{year}")
 
-    # Koordinat picker
-    day_x, month_x, year_x = 150, 450, 750
-    picker_y = 1350
+    # Tunggu picker muncul
+    for _ in range(10):
+        pickers = d(className="androidx.recyclerview.widget.RecyclerView")
+        if pickers.exists and pickers.count == 3:
+            break
+        time.sleep(1)
+    else:
+        print("Picker birthday tidak muncul!")
+        return
 
-    def swipe_picker(x, current, target):
-        offset_per_item = 70
-        diff = target - current
-        direction = -1 if diff > 0 else 1
-        for _ in range(abs(diff)):
-            d.swipe(x, picker_y, x, picker_y + direction * offset_per_item, 0.15)
-            time.sleep(0.2)
+    # --- Klik pada picker day, month, year ---
+    # Day picker (kiri) → index 0
+    # Month picker (tengah) → index 1
+    # Year picker (kanan) → index 2
+    picker_day = d(className="androidx.recyclerview.widget.RecyclerView")[0]
+    picker_month = d(className="androidx.recyclerview.widget.RecyclerView")[1]
+    picker_year = d(className="androidx.recyclerview.widget.RecyclerView")[2]
 
-    default_year = 2025
-    default_month = 6
-    default_day = 26
-
-    swipe_picker(year_x, default_year, year)
-    swipe_picker(month_x, default_month, month)
-    swipe_picker(day_x, default_day, day)
+    # Klik item yang tepat pada masing-masing picker
+    try:
+        # Day: item-0 = 1, item-1 = 2, dst (jadi day-1)
+        picker_day.child(index=day-1).click()
+        time.sleep(0.3)
+        # Month: item-0 = Jan, dst (jadi month-1)
+        picker_month.child(index=month-1).click()
+        time.sleep(0.3)
+        # Year: cari index dari tahun random di list tahun picker
+        # Kita asumsikan tahun di picker diurut dari terbesar (teratas) ke terkecil (terbawah)
+        # Jadi baca text setiap item, cari yang == str(year)
+        clicked_year = False
+        for i in range(picker_year.count):
+            item = picker_year.child(index=i)
+            item_text = item.info.get("text", "")
+            if item_text == str(year):
+                item.click()
+                clicked_year = True
+                break
+        if not clicked_year:
+            print("Tahun tidak ditemukan di picker, klik tahun default paling atas.")
+            picker_year.child(index=0).click()
+        time.sleep(0.3)
+    except Exception as e:
+        print(f"Error klik picker birthday: {e}")
 
     print(f"Tanggal lahir dipilih: {day:02d}-{month:02d}-{year}")
 
+    # Klik tombol Next (Birthday)
     next_x, next_y = 450, 1550
     d.click(next_x, next_y)
     print("Tombol Next (Birthday) diklik.")
