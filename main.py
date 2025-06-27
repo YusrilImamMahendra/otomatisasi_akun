@@ -17,7 +17,6 @@ MUMU_DEVICE = "127.0.0.1:7555"
 EMAIL = "cobaja.1933@gmail.com"
 EMAIL_PASSWORD = "hpxifkmjcxzmjrrq"
 FULLNAME = "yaboyunik12345"
-USERNAME = "usernameunik12345"
 PASSWORD = "PasswordKuat2025"
 
 # Konfigurasi IMAP untuk Gmail
@@ -563,9 +562,11 @@ def register_instagram_lite(email, fullname, username, password):
         time.sleep(1)
 
     # Lanjut pengisian data akun
+
     max_attempts = 5
     for step in range(max_attempts):
         print(f"Mencari dan mengisi field nama lengkap (percobaan {step + 1}/{max_attempts})...")
+        # Fullname
         if wait_for(d, resourceId="com.instagram.lite:id/full_name", timeout=5):
             fullname_field = d(resourceId="com.instagram.lite:id/full_name")
             fullname_field.clear_text()
@@ -575,35 +576,17 @@ def register_instagram_lite(email, fullname, username, password):
             print("Field nama lengkap tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
             mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
             if mac_fields.exists and mac_fields.count > 0:
-                fullname_field = mac_fields[0]  # Ambil field pertama sebagai nama lengkap
+                fullname_field = mac_fields[0]
                 fullname_field.clear_text()
                 fullname_field.set_text(fullname)
                 time.sleep(1)
                 print(f"Field nama lengkap diisi dengan '{fullname}' menggunakan MultiAutoCompleteTextView.")
             else:
                 print("Field nama lengkap tidak ditemukan, lanjut ke langkah berikutnya setelah percobaan...")
-                if step == max_attempts - 1:  # Jika sudah maksimal percobaan
+                if step == max_attempts - 1:
                     break
 
-        print("Mengisi username...")
-        if wait_for(d, resourceId="com.instagram.lite:id/username", timeout=5):
-            username_field = d(resourceId="com.instagram.lite:id/username")
-            username_field.clear_text()
-            username_field.set_text(username)
-            time.sleep(1)
-        else:
-            print("Field username tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
-            mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            if mac_fields.exists and mac_fields.count > 1:
-                username_field = mac_fields[1]  # Ambil field kedua sebagai username
-                username_field.clear_text()
-                username_field.set_text(username)
-                time.sleep(1)
-                print(f"Field username diisi dengan '{username}' menggunakan MultiAutoCompleteTextView.")
-            else:
-                print("Field username tidak ditemukan, lanjut ke langkah berikutnya...")
-                break
-
+        # Password
         print("Mengisi password...")
         if wait_for(d, resourceId="com.instagram.lite:id/password", timeout=5):
             password_field = d(resourceId="com.instagram.lite:id/password")
@@ -613,8 +596,8 @@ def register_instagram_lite(email, fullname, username, password):
         else:
             print("Field password tidak ditemukan berdasarkan resourceId, mencoba dengan MultiAutoCompleteTextView...")
             mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            if mac_fields.exists and mac_fields.count > 2:
-                password_field = mac_fields[2]  # Ambil field ketiga sebagai password
+            if mac_fields.exists and mac_fields.count > 1:
+                password_field = mac_fields[1]
                 password_field.clear_text()
                 password_field.set_text(password)
                 time.sleep(1)
@@ -626,24 +609,21 @@ def register_instagram_lite(email, fullname, username, password):
         print("Klik Next untuk melanjutkan registrasi...")
         if not (wait_and_click(d, text="Next") or wait_and_click(d, text="Berikutnya")):
             print("Tombol Next tidak ditemukan berdasarkan teks, mencoba koordinat...")
-            d.click(450, 513)  # Koordinat tengah dari bounds [18,480][882,546]
+            d.click(450, 513)
             print("Tombol Next diklik berdasarkan koordinat.")
         time.sleep(3)
 
+        # Setelah klik next, cek halaman birthday
         if d(textContains="Add your birthday").exists or d(textContains="Birthday").exists:
             set_birthday(d)
-        time.sleep(3)
-        if d(textContains="Your account has been created").exists:
-            print("Akun berhasil dibuat!")
-            break
-        print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
-        return
+            time.sleep(3)
+            print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
+            return
 
     print("Gagal mengisi semua field setelah beberapa percobaan, mencoba klik Next...")
-    d.click(450, 513)  # Coba klik Next meskipun field tidak terdeteksi semua
+    d.click(450, 513)
     time.sleep(3)
     print("Registrasi selesai atau gagal, periksa manual jika perlu.")
-
 def main():
     start_mumu()
     unlock_screen()
@@ -652,13 +632,13 @@ def main():
     if check_instagram_lite_installed():
         print("Instagram Lite sudah terinstall, langsung menuju proses registrasi...")
         time.sleep(2)
-        register_instagram_lite(EMAIL, FULLNAME, USERNAME, PASSWORD)
+        register_instagram_lite(EMAIL, FULLNAME, PASSWORD)
     else:
         print("Instagram Lite belum terinstall, memulai proses install...")
         if install_instagram_lite():
             print("Instagram Lite berhasil diinstall, melanjutkan ke proses registrasi...")
             time.sleep(5)
-            register_instagram_lite(EMAIL, FULLNAME, USERNAME, PASSWORD)
+            register_instagram_lite(EMAIL, FULLNAME, PASSWORD)
         else:
             print("Automasi install Instagram Lite gagal, proses dihentikan.")
 
