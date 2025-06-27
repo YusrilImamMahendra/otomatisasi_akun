@@ -8,10 +8,10 @@ import re
 import uuid
 import random
 
-# Konfigurasi path dan device untuk LDPlayer
+# KONFIGURASI PATH DAN DEVICE UNTUK LDPLAYER
 LDPLAYER_EXE_PATH = r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
 ADB_PATH = r"C:\LDPlayer\LDPlayer9\adb.exe"
-LDPLAYER_DEVICE = "127.0.0.1:5555"  # Port default LDPlayer, cek dengan 'adb devices'
+LDPLAYER_DEVICE = "emulator-5554"
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "cobaja.1933@gmail.com"
@@ -26,25 +26,25 @@ IMAP_PORT = 993
 def start_ldplayer_and_connect_adb():
     print("Menjalankan emulator LDPlayer...")
     subprocess.Popen([LDPLAYER_EXE_PATH])
-    # Tunggu emulator benar-benar berjalan
-    for _ in range(60):  # max 3 menit
+    # Tunggu emulator benar-benar berjalan dan terdeteksi oleh ADB
+    max_wait = 180  # detik
+    wait_time = 0
+    while wait_time < max_wait:
         out = subprocess.getoutput(f'"{ADB_PATH}" devices')
         print("ADB devices output:", out)
         lines = out.splitlines()
-        ready = False
         for line in lines:
-            if LDPLAYER_DEVICE in line and "device" in line and "offline" not in line:
-                ready = True
-                break
-        if ready:
-            print("Emulator siap, adb sudah terhubung!")
-            return
-        # Cek jika device belum muncul, coba hubungkan manual via adb connect
-        if not any(LDPLAYER_DEVICE in line for line in lines):
-            print("ADB belum terhubung ke emulator, mencoba adb connect...")
-            os.system(f'"{ADB_PATH}" connect {LDPLAYER_DEVICE}')
+            if "device" in line and "offline" not in line and "List of devices" not in line:
+                print(f"Emulator siap, adb sudah terhubung sebagai: {line.strip()}")
+                global LDPLAYER_DEVICE
+                LDPLAYER_DEVICE = line.split()[0]
+                return
+        print("ADB belum terhubung ke emulator, mencoba connect ke port umum LDPlayer...")
+        for port in [5554, 5555, 5556, 62001]:
+            os.system(f'"{ADB_PATH}" connect 127.0.0.1:{port}')
         time.sleep(3)
-    print("Gagal mendapatkan koneksi ADB ke emulator!")
+        wait_time += 3
+    raise RuntimeError("Gagal mendapatkan koneksi ADB ke emulator! Pastikan LDPlayer sudah running dan Android siap.")
 
 def unlock_screen():
     print("Membuka kunci layar (jika terkunci)...")
@@ -119,7 +119,6 @@ def get_verification_code_from_email(email_address, email_password, timeout=300,
                                     mail.close()
                                     mail.logout()
                                     return verification_code
-
                                 body = ""
                                 if email_message.is_multipart():
                                     for part in email_message.walk():
@@ -135,7 +134,7 @@ def get_verification_code_from_email(email_address, email_password, timeout=300,
                                     if verification_code in exclude_codes:
                                         print(f"Kode {verification_code} sudah pernah dicoba, skip.")
                                         continue
-                                    print(f"KodeGeo verifikasi ditemukan di body: {verification_code}")
+                                    print(f"Kode verifikasi ditemukan di body: {verification_code}")
                                     mail.close()
                                     mail.logout()
                                     return verification_code
@@ -324,23 +323,20 @@ def handle_email_verification(d, max_attempts=3):
             # Cek apakah kode valid
             if d(textContains="That code isn't valid").exists:
                 print("Kode tidak valid, akan melakukan resend code.")
-                # Klik "I didn't get the code" dengan teks atau koordinat
                 if wait_and_click(d, text="I didn't get the code", timeout=5):
                     print("Tombol 'I didn't get the code' berhasil diklik.")
                     time.sleep(2)
-                    # Klik "Resend confirmation code" dengan teks atau koordinat
                     if wait_and_click(d, text="Resend confirmation code", timeout=5):
                         print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
-                        time.sleep(10)  # Tunggu kode baru
-                        exclude_codes.append(verification_code)  # Tambahkan kode lama ke exclude_codes
-                        continue  # Ulangi proses dengan kode baru
+                        time.sleep(10)
+                        exclude_codes.append(verification_code)
+                        continue
                     else:
                         print("Opsi 'Resend confirmation code' tidak ditemukan!")
                         return False
                 else:
-                    # Jika teks tidak ditemukan, coba koordinat default (sesuaikan berdasarkan UI)
                     print("Tombol 'I didn't get the code' tidak ditemukan berdasarkan teks, mencoba koordinat...")
-                    d.click(450, 600)  # Koordinat perkiraan, sesuaikan jika perlu
+                    d.click(450, 600)
                     time.sleep(2)
                     if wait_and_click(d, text="Resend confirmation code", timeout=5):
                         print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
@@ -351,7 +347,6 @@ def handle_email_verification(d, max_attempts=3):
                         print("Gagal menemukan atau mengklik 'Resend confirmation code'!")
                         return False
             else:
-                # Cek apakah sudah pindah ke halaman berikutnya
                 mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
                 if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
                     print("Masih di halaman verifikasi kode, kemungkinan kode salah.")
@@ -399,10 +394,8 @@ def debug_screen_elements(d):
 
 def set_birthday(d, min_year=1980, max_year=2004):
     print("Mendeteksi dan mengisi tanggal lahir (acak, metode klik RecyclerView)...")
-    # Pilih tanggal random
     year = random.randint(min_year, max_year)
     month = random.randint(1, 12)
-    # Hari maksimal sesuai bulan & tahun (leap year)
     if month == 2:
         max_day = 29 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 28
     elif month in [4, 6, 9, 11]:
@@ -412,7 +405,6 @@ def set_birthday(d, min_year=1980, max_year=2004):
     day = random.randint(1, max_day)
     print(f"Target birthday: {day:02d}-{month:02d}-{year}")
 
-    # Tunggu picker muncul
     for _ in range(10):
         pickers = d(className="androidx.recyclerview.widget.RecyclerView")
         if pickers.exists and pickers.count == 3:
@@ -422,25 +414,15 @@ def set_birthday(d, min_year=1980, max_year=2004):
         print("Picker birthday tidak muncul!")
         return
 
-    # --- Klik pada picker day, month, year ---
-    # Day picker (kiri) → index 0
-    # Month picker (tengah) → index 1
-    # Year picker (kanan) → index 2
     picker_day = d(className="androidx.recyclerview.widget.RecyclerView")[0]
     picker_month = d(className="androidx.recyclerview.widget.RecyclerView")[1]
     picker_year = d(className="androidx.recyclerview.widget.RecyclerView")[2]
 
-    # Klik item yang tepat pada masing-masing picker
     try:
-        # Day: item-0 = 1, item-1 = 2, dst (jadi day-1)
         picker_day.child(index=day-1).click()
         time.sleep(0.3)
-        # Month: item-0 = Jan, dst (jadi month-1)
         picker_month.child(index=month-1).click()
         time.sleep(0.3)
-        # Year: cari index dari tahun random di list tahun picker
-        # Kita asumsikan tahun di picker diurut dari terbesar (teratas) ke terkecil (terbawah)
-        # Jadi baca text setiap item, cari yang == str(year)
         clicked_year = False
         for i in range(picker_year.count):
             item = picker_year.child(index=i)
@@ -458,7 +440,6 @@ def set_birthday(d, min_year=1980, max_year=2004):
 
     print(f"Tanggal lahir dipilih: {day:02d}-{month:02d}-{year}")
 
-    # Klik tombol Next (Birthday)
     next_x, next_y = 450, 1550
     d.click(next_x, next_y)
     print("Tombol Next (Birthday) diklik.")
@@ -490,12 +471,17 @@ def install_instagram_lite():
     time.sleep(1)
     d.press("enter")
     time.sleep(3)
-    print("Klik hasil aplikasi 'Instagram Lite' pada hasil pencarian...")
-    d.click(400, 300)  # Sesuaikan dengan posisi hasil di LDPlayer
-    time.sleep(2)
-    print("Klik tombol Install di panel kanan...")
-    d.click(1100, 390)  # Sesuaikan jika letak tombol install berbeda
-    time.sleep(2)
+    print("Klik tombol Install di panel kanan (detail aplikasi, via XPath)...")
+    xpath_install = '//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View[2]/android.view.View/android.view.View[1]/android.view.View[5]/android.widget.Button[2]'
+    if d.xpath(xpath_install).exists:
+        d.xpath(xpath_install).click()
+        print("Tombol Install (detail aplikasi) berhasil diklik via XPath.")
+    elif d(text="Install").exists:
+        d(text="Install").click()
+        print("Tombol Install diklik via text (fallback).")
+    else:
+        print("Tombol Install tidak ditemukan! Gagal install Instagram Lite.")
+        return False
     print("Menunggu proses install selesai (tombol Buka muncul)...")
     for _ in range(60):
         if d(text="Open").exists or d(text="Buka").exists:
@@ -554,7 +540,6 @@ def register_instagram_lite(email, fullname, password):
         print("Gagal menemukan tombol Next!")
         return
 
-    # PATCH: Deteksi flow verifikasi kode di awal
     print("Cek apakah langsung masuk ke halaman verifikasi kode...")
     for _ in range(10):
         mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
