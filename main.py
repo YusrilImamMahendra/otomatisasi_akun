@@ -9,9 +9,9 @@ import uuid
 import random
 
 # Konfigurasi path dan device
-MUMU_EXE_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\MuMuPlayer.exe"
-ADB_PATH = r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe"
-MUMU_DEVICE = "127.0.0.1:7555"
+LDPLAYER_EXE_PATH = r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
+ADB_PATH = r"C:\LDPlayer\LDPlayer9\adb.exe"
+LDPLAYER_DEVICE = "127.0.0.1:5555"
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "cobaja.1933@gmail.com"
@@ -23,27 +23,22 @@ PASSWORD = "PasswordKuat2025"
 IMAP_SERVER = "imap.gmail.com"
 IMAP_PORT = 993
 
-def start_mumu():
-    print("Menjalankan emulator MuMu...")
-    subprocess.Popen([MUMU_EXE_PATH])
+def start_ldplayer():
+    print("Menjalankan emulator LDPlayer...")
+    subprocess.Popen([LDPLAYER_EXE_PATH])
     while True:
         out = subprocess.getoutput(f'"{ADB_PATH}" devices')
         print("ADB devices output:", out)
         lines = out.splitlines()
         ready = False
         for line in lines:
-            if MUMU_DEVICE in line and "device" in line and "offline" not in line:
+            if LDPLAYER_DEVICE in line and "device" in line and "offline" not in line:
                 ready = True
                 break
         if ready:
             print("Emulator siap!")
             break
         time.sleep(3)
-
-def unlock_screen():
-    print("Membuka kunci layar (jika terkunci)...")
-    os.system(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell input keyevent 224')
-    os.system(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell input keyevent 82')
 
 def wait_and_click(d, text=None, resourceId=None, bounds=None, timeout=20):
     for _ in range(timeout):
@@ -461,7 +456,7 @@ def set_birthday(d, min_year=1980, max_year=2004):
 def check_instagram_lite_installed():
     print("Mengecek apakah Instagram Lite sudah terinstall...")
     try:
-        result = subprocess.getoutput(f'"{ADB_PATH}" -s {MUMU_DEVICE} shell pm list packages com.instagram.lite')
+        result = subprocess.getoutput(f'"{ADB_PATH}" -s {LDPLAYER_DEVICE} shell pm list packages com.instagram.lite')
         print(f"Hasil ADB: {result}")
         if "com.instagram.lite" in result:
             print("Instagram Lite sudah terinstall.")
@@ -473,18 +468,13 @@ def check_instagram_lite_installed():
 
 def install_instagram_lite():
     print("Menghubungkan ke emulator dengan uiautomator2...")
-    d = u2.connect(MUMU_DEVICE)
+    d = u2.connect(LDPLAYER_DEVICE)
     print("Membuka Google Play Store...")
     d.app_start("com.android.vending")
     time.sleep(4)
-    print("Klik ikon Search di sidebar (by coordinate)...")
-    d.click(78, 450)
+    print("Klik search bar di bagian atas (LDPlayer)...")
+    d.click(350, 60)  # Koordinat search bar, cek di LDPlayer-mu
     time.sleep(2)
-    print("Klik search bar di bagian atas...")
-    if not wait_and_click(d, text="Search apps & games"):
-        print("Gagal klik search bar di atas!")
-        return False
-    time.sleep(1)
     print("Ketik 'Instagram Lite'...")
     d.send_keys("Instagram Lite")
     time.sleep(1)
@@ -507,7 +497,7 @@ def install_instagram_lite():
     return False
 
 def register_instagram_lite(email, fullname, password):
-    d = u2.connect(MUMU_DEVICE)
+    d = u2.connect(LDPLAYER_DEVICE)
     print("Membuka aplikasi Instagram Lite...")
     d.app_start("com.instagram.lite")
     time.sleep(5)
@@ -619,8 +609,7 @@ def register_instagram_lite(email, fullname, password):
     return
 
 def main():
-    start_mumu()
-    unlock_screen()
+    start_ldplayer()
     print("Menunggu 10 detik sebelum memulai automasi...")
     time.sleep(10)
     if check_instagram_lite_installed():
