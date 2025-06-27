@@ -465,7 +465,7 @@ def install_instagram_lite():
     d.app_start("com.android.vending")
     time.sleep(4)
     print("Klik search bar di bagian atas (LDPlayer)...")
-    d.click(350, 60)  # Koordinat search bar Play Store LDPlayer, sesuaikan jika perlu!
+    d.click(350, 60)
     time.sleep(2)
     d.send_keys("Instagram Lite")
     time.sleep(1)
@@ -482,10 +482,25 @@ def install_instagram_lite():
     else:
         print("Tombol Install tidak ditemukan! Gagal install Instagram Lite.")
         return False
+    
     print("Menunggu proses install selesai (tombol Buka muncul)...")
     for _ in range(60):
-        if d(text="Open").exists or d(text="Buka").exists:
-            print("Instagram Lite berhasil diinstall!")
+        # Tambahkan pengecekan tombol Open dengan XPath yang diberikan
+        xpath_open = '//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View[2]/android.view.View/android.view.View[1]/android.view.View[5]/android.widget.Button'
+        if d.xpath(xpath_open).exists:
+            print("Tombol Open ditemukan via XPath, mengklik...")
+            d.xpath(xpath_open).click()
+            time.sleep(3)
+            return True
+        elif d(text="Open").exists:
+            print("Tombol Open ditemukan via text, mengklik...")
+            d(text="Open").click()
+            time.sleep(3)
+            return True
+        elif d(text="Buka").exists:
+            print("Tombol Buka ditemukan, mengklik...")
+            d(text="Buka").click()
+            time.sleep(3)
             return True
         time.sleep(2)
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
