@@ -77,6 +77,91 @@ def wait_for(d, text=None, resourceId=None, bounds=None, timeout=20):
         time.sleep(1)
     return False
 
+def handle_permission_popup(d, timeout=30):
+    """
+    Menangani pop-up perizinan Instagram Lite secara otomatis.
+    Akan mengklik tombol ALLOW/IZINKAN untuk semua jenis perizinan.
+    """
+    print("Memulai pengecekan pop-up perizinan...")
+    
+    permission_handled = False
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        # Cek berbagai variasi tombol Allow/Izinkan
+        permission_buttons = [
+            "ALLOW",
+            "Allow", 
+            "IZINKAN",
+            "Izinkan",
+            "OK",
+            "WHILE USING THE APP",
+            "While using the app"
+        ]
+        
+        permission_found = False
+        
+        for button_text in permission_buttons:
+            if d(text=button_text).exists:
+                print(f"Pop-up perizinan terdeteksi dengan tombol '{button_text}', mengklik...")
+                d(text=button_text).click()
+                time.sleep(2)
+                permission_found = True
+                permission_handled = True
+                print(f"Tombol '{button_text}' berhasil diklik.")
+                break
+        
+        # Cek pop-up berdasarkan resource ID jika ada
+        permission_resource_ids = [
+            "com.android.permissioncontroller:id/permission_allow_button",
+            "android:id/button1",
+            "com.android.packageinstaller:id/permission_allow_button"
+        ]
+        
+        if not permission_found:
+            for resource_id in permission_resource_ids:
+                if d(resourceId=resource_id).exists:
+                    print(f"Pop-up perizinan terdeteksi dengan resource ID '{resource_id}', mengklik...")
+                    d(resourceId=resource_id).click()
+                    time.sleep(2)
+                    permission_found = True
+                    permission_handled = True
+                    print(f"Resource ID '{resource_id}' berhasil diklik.")
+                    break
+        
+        # Cek apakah ada dialog dengan keyword "Instagram Lite" dan "contacts"
+        if not permission_found:
+            if (d(textContains="Instagram Lite").exists and 
+                (d(textContains="contacts").exists or d(textContains="kontak").exists)):
+                print("Pop-up perizinan Instagram Lite untuk akses kontak terdeteksi...")
+                
+                # Cari tombol di bagian kanan bawah dialog (biasanya ALLOW)
+                buttons = d(className="android.widget.Button")
+                if buttons.exists:
+                    for i in range(buttons.count):
+                        try:
+                            button = buttons[i]
+                            button_text = button.info.get('text', '')
+                            bounds = button.info.get('bounds', {})
+                            
+                            # Tombol ALLOW biasanya di posisi kanan
+                            if bounds and bounds.get('right', 0) > 600:  # Asumsi layar > 600px
+                                print(f"Mengklik tombol kanan (kemungkinan ALLOW): '{button_text}'")
+                                button.click()
+                                time.sleep(2)
+                                permission_found = True
+                                permission_handled = True
+                                break
+                        except Exception as e:
+                            print(f"Error saat cek button {i}: {e}")
+                            continue
+    if permission_handled:
+        print("Pop-up perizinan berhasil ditangani.")
+    else:
+        print("Tidak ada pop-up perizinan yang terdeteksi atau sudah selesai.")
+    
+    return permission_handled
+
 def get_verification_code_from_email(email_address, email_password, timeout=300, exclude_codes=None):
     print("Mencari kode verifikasi di email (termasuk folder Sosial)...")
     start_time = time.time()
@@ -444,28 +529,6 @@ def set_birthday(d, min_year=1980, max_year=2004):
     d.click(next_x, next_y)
     print("Tombol Next (Birthday) diklik.")
     time.sleep(2)
-    
-def handle_permission_popup(d, timeout=10):
-    """
-    Otomatis klik tombol IZINKAN jika pop up perizinan muncul.
-    """
-    for _ in range(timeout):
-        # Cek dengan text Bahasa Indonesia
-        if d(text="IZINKAN").exists:
-            print("Pop up perizinan terdeteksi, mengklik 'IZINKAN'...")
-            d(text="IZINKAN").click()
-            time.sleep(1)
-            # Tunggu sejenak jika ada pop up berikutnya
-            continue
-        # Cek dengan text Bahasa Inggris (untuk jaga-jaga)
-        elif d(text="ALLOW").exists:
-            print("Permission pop up detected, clicking 'ALLOW'...")
-            d(text="ALLOW").click()
-            time.sleep(1)
-            continue
-        else:
-            time.sleep(1)
-    print("Handle permission pop up selesai atau tidak ditemukan.")
 
 def check_instagram_lite_installed():
     print("Mengecek apakah Instagram Lite sudah terinstall...")
@@ -513,16 +576,22 @@ def install_instagram_lite():
             print("Tombol Open ditemukan via XPath, mengklik...")
             d.xpath(xpath_open).click()
             time.sleep(3)
+            # Handle permission popup setelah membuka aplikasi
+            handle_permission_popup(d)
             return True
         elif d(text="Open").exists:
             print("Tombol Open ditemukan via text, mengklik...")
             d(text="Open").click()
             time.sleep(3)
+            # Handle permission popup setelah membuka aplikasi
+            handle_permission_popup(d)
             return True
         elif d(text="Buka").exists:
             print("Tombol Buka ditemukan, mengklik...")
             d(text="Buka").click()
             time.sleep(3)
+            # Handle permission popup setelah membuka aplikasi
+            handle_permission_popup(d)
             return True
         time.sleep(2)
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
