@@ -477,58 +477,77 @@ def debug_screen_elements(d):
     except Exception as e:
         print(f"Error saat debug: {e}")
 
-def set_birthday(d, min_year=1980, max_year=2004):
-    print("Mendeteksi dan mengisi tanggal lahir (acak, metode klik RecyclerView)...")
-    year = random.randint(min_year, max_year)
-    month = random.randint(1, 12)
-    if month == 2:
-        max_day = 29 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 28
-    elif month in [4, 6, 9, 11]:
-        max_day = 30
-    else:
-        max_day = 31
-    day = random.randint(1, max_day)
-    print(f"Target birthday: {day:02d}-{month:02d}-{year}")
+def set_birthday(d, min_age=18, max_age=30):
+    print("Set birthday dengan metode 'Enter age instead'...")
 
+    # 1. Klik tombol Next (XPath)
+    xpath_next = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
     for _ in range(10):
-        pickers = d(className="androidx.recyclerview.widget.RecyclerView")
-        if pickers.exists and pickers.count == 3:
+        if d.xpath(xpath_next).exists:
+            d.xpath(xpath_next).click()
+            print("Tombol Next diklik pada halaman Add your birthday.")
+            time.sleep(1)
             break
         time.sleep(1)
     else:
-        print("Picker birthday tidak muncul!")
+        print("Tombol Next pada birthday tidak ditemukan!")
         return
 
-    picker_day = d(className="androidx.recyclerview.widget.RecyclerView")[0]
-    picker_month = d(className="androidx.recyclerview.widget.RecyclerView")[1]
-    picker_year = d(className="androidx.recyclerview.widget.RecyclerView")[2]
+    # 2. Tunggu pop up 'Enter your real birthday' dan klik OK
+    for _ in range(10):
+        if d(text="OK").exists:
+            d(text="OK").click()
+            print("Pop up 'Enter your real birthday' ditemukan dan tombol OK diklik.")
+            time.sleep(1)
+            break
+        time.sleep(1)
+    else:
+        print("Pop up OK tidak muncul.")
 
-    try:
-        picker_day.child(index=day-1).click()
-        time.sleep(0.3)
-        picker_month.child(index=month-1).click()
-        time.sleep(0.3)
-        clicked_year = False
-        for i in range(picker_year.count):
-            item = picker_year.child(index=i)
-            item_text = item.info.get("text", "")
-            if item_text == str(year):
-                item.click()
-                clicked_year = True
-                break
-        if not clicked_year:
-            print("Tahun tidak ditemukan di picker, klik tahun default paling atas.")
-            picker_year.child(index=0).click()
-        time.sleep(0.3)
-    except Exception as e:
-        print(f"Error klik picker birthday: {e}")
+    # 3. Tunggu tombol "Enter age instead" muncul, lalu klik (XPath)
+    xpath_enter_age = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup'
+    for _ in range(10):
+        if d.xpath(xpath_enter_age).exists:
+            d.xpath(xpath_enter_age).click()
+            print("Tombol 'Enter age instead' diklik.")
+            time.sleep(1)
+            break
+        time.sleep(1)
+    else:
+        print("Tombol 'Enter age instead' tidak ditemukan!")
+        return
 
-    print(f"Tanggal lahir dipilih: {day:02d}-{month:02d}-{year}")
+    # 4. Isi usia di halaman "Enter your age"
+    for _ in range(10):
+        age_field = d(className="android.widget.EditText")
+        if age_field.exists:
+            age = str(random.randint(min_age, max_age))
+            age_field.set_text(age)
+            print(f"Field usia diisi dengan: {age}")
+            time.sleep(1)
+            break
+        time.sleep(1)
+    else:
+        print("Field usia tidak ditemukan!")
+        return
 
-    next_x, next_y = 450, 1550
-    d.click(next_x, next_y)
-    print("Tombol Next (Birthday) diklik.")
-    time.sleep(2)
+    # 5. Klik tombol Next lagi (umumnya text "Next" atau "Berikutnya")
+    for _ in range(10):
+        if d(text="Next").exists:
+            d(text="Next").click()
+            print("Tombol Next diklik setelah isi usia.")
+            time.sleep(1)
+            break
+        elif d(text="Berikutnya").exists:
+            d(text="Berikutnya").click()
+            print("Tombol Berikutnya diklik setelah isi usia.")
+            time.sleep(1)
+            break
+        time.sleep(1)
+    else:
+        print("Tombol Next/ Berikutnya tidak ditemukan setelah isi usia!")
+
+    print("Birthday selesai diisi dengan metode Enter age instead.")
 
 def check_instagram_lite_installed():
     print("Mengecek apakah Instagram Lite sudah terinstall...")
