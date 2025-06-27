@@ -532,24 +532,37 @@ def set_birthday(d, min_age=18, max_age=30):
 
     # 4. Isi usia di halaman "Enter your age"
     for _ in range(10):
-        age_field = d(className="android.widget.EditText")
+        age_field = d(className="android.widget.MultiAutoCompleteTextView")
         if age_field.exists:
             age = str(random.randint(min_age, max_age))
-            age_field.click()  # Fokuskan dulu
+            age_field.click()
             time.sleep(0.5)
-            age_field.clear_text()
+            # Clear text dengan perintah ulang
+            try:
+                age_field.clear_text()
+            except Exception:
+                pass
             time.sleep(0.5)
-            age_field.set_text(age)
+            # Gunakan set_text dan backup dengan send_keys
+            try:
+                age_field.set_text(age)
+            except Exception as e:
+                print(f"set_text error: {e}, mencoba send_keys")
+                age_field.send_keys(age)
             print(f"Field usia diisi dengan: {age}")
             time.sleep(1)
+            # Pastikan terisi (bisa juga verifikasi d(className="android.widget.MultiAutoCompleteTextView").get_text())
             break
+        else:
+            # Jaga-jaga jika field belum muncul
+            print("Field usia belum muncul, retrying...")
         time.sleep(1)
     else:
         print("Field usia tidak ditemukan!")
         debug_screen_elements(d)
         return
 
-    # 5. Klik tombol Next lagi (umumnya text "Next" atau "Berikutnya")
+    # 5. Klik tombol Next lagi (umumnya text "Next" atau "Berikutnya" atau dengan XPath yang sama)
     for _ in range(10):
         if d(text="Next").exists:
             d(text="Next").click()
@@ -561,7 +574,6 @@ def set_birthday(d, min_age=18, max_age=30):
             print("Tombol Berikutnya diklik setelah isi usia.")
             time.sleep(1)
             break
-        # Coba klik via xpath pada halaman ini juga
         elif d.xpath(xpath_next).exists:
             d.xpath(xpath_next).click()
             print("Tombol Next (xpath) diklik setelah isi usia.")
