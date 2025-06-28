@@ -485,63 +485,64 @@ def debug_screen_elements(d):
 def handle_existing_account_popup(d, timeout=15):
     """
     Menangani pop-up dari Instagram Lite ketika email sudah terdaftar di akun lain.
-    Versi yang lebih akurat dengan pendeteksian multi-level.
+    Akan menekan tombol "Create new account" pada pop up jika muncul.
     """
     print("Memeriksa pop-up email sudah terdaftar di Instagram Lite...")
-    
+
     start_time = time.time()
-    
+
     while time.time() - start_time < timeout:
         # Deteksi utama: Cek elemen spesifik dalam popup
-        if (d(text="This email is on another account").exists or 
+        if (
+            d(text="This email is on another account").exists or
             d(textContains="email is on another account").exists or
             d(text="Log in to existing account").exists or
-            d(text="Create new account").exists):
-            
+            d(text="Create new account").exists
+        ):
             print("Pop-up email sudah terdaftar terdeteksi")
-            
-            # Versi 1: Coba klik langsung dengan teks (paling reliable)
+
+            # Paling direct: klik tombol 'Create new account' by text
             if d(text="Create new account").exists:
                 print("Mengklik tombol 'Create new account' via text...")
                 d(text="Create new account").click()
                 time.sleep(2)
                 return True
-            
-            # Versi 2: Cari berdasarkan struktur ViewGroup yang spesifik
-            # Dari XML, tombol berada dalam struktur ViewGroup tertentu
-            view_groups = d(className="android.view.ViewGroup", clickable=True)
-            for i in range(min(view_groups.count, 20)):  # Batasi pencarian
+
+            # Cek tombol "Create new account" via className dan urutan
+            buttons = d(className="android.widget.Button")
+            for i in range(buttons.count):
                 try:
-                    bounds = view_groups[i].info.get('bounds', {})
-                    # Filter berdasarkan posisi tombol (biasanya di bagian bawah popup)
-                    if bounds.get('top', 0) > 800 and bounds.get('height', 0) > 50:
-                        print(f"Found clickable ViewGroup at index {i} with bounds: {bounds}")
-                        view_groups[i].click()
+                    btn = buttons[i]
+                    btn_text = btn.info.get("text", "")
+                    print(f"Button {i}: '{btn_text}'")
+                    if "Create new account" in btn_text:
+                        print("Klik tombol 'Create new account' ditemukan by className!")
+                        btn.click()
                         time.sleep(2)
                         return True
                 except Exception as e:
-                    print(f"Error checking ViewGroup {i}: {e}")
-                    continue
-            
-            # Versi 3: Klik berdasarkan koordinat relatif
-            # Hitung koordinat berdasarkan ukuran layar
-            screen_width = d.info['displayWidth']
-            screen_height = d.info['displayHeight']
-            
-            # Koordinat relatif untuk tombol "Create new account"
-            # Biasanya di bagian bawah tengah popup
-            click_x = screen_width // 2
-            click_y = screen_height * 3 // 4  # 3/4 dari tinggi layar
-            
-            print(f"Mengklik koordinat fallback: {click_x},{click_y}")
-            d.click(click_x, click_y)
-            time.sleep(2)
-            return True
-        
+                    print(f"Error pada Button {i}: {e}")
+
+            # Coba klik fallback: klik posisi pada layar berdasarkan gambar
+            # Pada screenshot, tombol "Create new account" ada di bawah tengah popup
+            # Koordinat kira-kira (dari screenshot, layar 676x1039, tombol bawah tengah)
+            try:
+                screen_width = d.info['displayWidth']
+                screen_height = d.info['displayHeight']
+                click_x = int(screen_width / 2)
+                click_y = int(screen_height * 0.67)  # 2/3 ke bawah layar
+                print(f"Mengklik koordinat fallback (bawah tengah popup): {click_x}, {click_y}")
+                d.click(click_x, click_y)
+                time.sleep(2)
+                return True
+            except Exception as e:
+                print(f"Fallback click error: {e}")
+
         time.sleep(0.5)  # Pengecekan lebih sering
-    
+
     print("Pop-up email sudah terdaftar tidak terdeteksi")
     return False
+
 
 def set_birthday(d, min_age=18, max_age=30):
     print("Set birthday dengan metode 'Enter age instead'...")
@@ -778,8 +779,13 @@ def register_instagram_lite(email, fullname, password):
         next_clicked = True
     if next_clicked:
         print("Tombol Next berhasil diklik, menunggu halaman berikutnya...")
-        time.sleep(5)
-        if not handle_existing_account_popup(d):
+        time.sleep(3)  # Ubah 5 ke 3 (biar cepat deteksi popup)
+        # Cek dan handle pop up email sudah terdaftar (WAJIB panggil di sini)
+        if handle_existing_account_popup(d, timeout=7):  # timeout lebih agresif
+            print("Popup existing account berhasil dihandle, lanjutkan registrasi.")
+            # Setelah klik "Create new account", beri delay agar popup hilang
+            time.sleep(2)
+        else:
             print("Tidak ada pop-up email terdaftar yang muncul, melanjutkan...")
         debug_screen_elements(d)
     else:
