@@ -16,7 +16,7 @@ LDPLAYER_DEVICE = "emulator-5554"
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "cobaja.1933@gmail.com"
 EMAIL_PASSWORD = "hpxifkmjcxzmjrrq"
-FULLNAME = "yaboyunik12345"
+FULLNAME = "yaboyunikssss12345"
 PASSWORD = "PasswordKuat2025"
 
 # Konfigurasi IMAP untuk Gmail
@@ -77,7 +77,7 @@ def wait_for(d, text=None, resourceId=None, bounds=None, timeout=20):
         time.sleep(1)
     return False
 
-def handle_permission_popup(d, timeout=30):
+def handle_permission_popup(d, timeout=10):
     """
     Menangani pop-up perizinan Instagram Lite secara otomatis.
     Akan mengklik tombol ALLOW/IZINKAN untuk semua jenis perizinan.
@@ -99,18 +99,18 @@ def handle_permission_popup(d, timeout=30):
             "While using the app"
         ]
         
-        permission_found = False
-        
         for button_text in permission_buttons:
             if d(text=button_text).exists:
                 print(f"Pop-up perizinan terdeteksi dengan tombol '{button_text}', mengklik...")
                 d(text=button_text).click()
-                time.sleep(2)
-                permission_found = True
+                time.sleep(1)
                 permission_handled = True
                 print(f"Tombol '{button_text}' berhasil diklik.")
                 break
         
+        if permission_handled:
+            break
+            
         # Cek pop-up berdasarkan resource ID jika ada
         permission_resource_ids = [
             "com.android.permissioncontroller:id/permission_allow_button",
@@ -118,47 +118,52 @@ def handle_permission_popup(d, timeout=30):
             "com.android.packageinstaller:id/permission_allow_button"
         ]
         
-        if not permission_found:
-            for resource_id in permission_resource_ids:
-                if d(resourceId=resource_id).exists:
-                    print(f"Pop-up perizinan terdeteksi dengan resource ID '{resource_id}', mengklik...")
-                    d(resourceId=resource_id).click()
-                    time.sleep(2)
-                    permission_found = True
-                    permission_handled = True
-                    print(f"Resource ID '{resource_id}' berhasil diklik.")
-                    break
+        for resource_id in permission_resource_ids:
+            if d(resourceId=resource_id).exists:
+                print(f"Pop-up perizinan terdeteksi dengan resource ID '{resource_id}', mengklik...")
+                d(resourceId=resource_id).click()
+                time.sleep(1)
+                permission_handled = True
+                print(f"Resource ID '{resource_id}' berhasil diklik.")
+                break
         
+        if permission_handled:
+            break
+            
         # Cek apakah ada dialog dengan keyword "Instagram Lite" dan "contacts"
-        if not permission_found:
-            if (d(textContains="Instagram Lite").exists and 
-                (d(textContains="contacts").exists or d(textContains="kontak").exists)):
-                print("Pop-up perizinan Instagram Lite untuk akses kontak terdeteksi...")
-                
-                # Cari tombol di bagian kanan bawah dialog (biasanya ALLOW)
-                buttons = d(className="android.widget.Button")
-                if buttons.exists:
-                    for i in range(buttons.count):
-                        try:
-                            button = buttons[i]
-                            button_text = button.info.get('text', '')
-                            bounds = button.info.get('bounds', {})
-                            
-                            # Tombol ALLOW biasanya di posisi kanan
-                            if bounds and bounds.get('right', 0) > 600:  # Asumsi layar > 600px
-                                print(f"Mengklik tombol kanan (kemungkinan ALLOW): '{button_text}'")
-                                button.click()
-                                time.sleep(2)
-                                permission_found = True
-                                permission_handled = True
-                                break
-                        except Exception as e:
-                            print(f"Error saat cek button {i}: {e}")
-                            continue
+        if (d(textContains="Instagram Lite").exists and 
+            (d(textContains="contacts").exists or d(textContains="kontak").exists)):
+            print("Pop-up perizinan Instagram Lite untuk akses kontak terdeteksi...")
+            
+            # Cari tombol di bagian kanan bawah dialog (biasanya ALLOW)
+            buttons = d(className="android.widget.Button")
+            if buttons.exists:
+                for i in range(buttons.count):
+                    try:
+                        button = buttons[i]
+                        button_text = button.info.get('text', '')
+                        bounds = button.info.get('bounds', {})
+                        
+                        # Tombol ALLOW biasanya di posisi kanan
+                        if bounds and bounds.get('right', 0) > 600:  # Asumsi layar > 600px
+                            print(f"Mengklik tombol kanan (kemungkinan ALLOW): '{button_text}'")
+                            button.click()
+                            time.sleep(1)
+                            permission_handled = True
+                            break
+                    except Exception as e:
+                        print(f"Error saat cek button {i}: {e}")
+                        continue
+        
+        if permission_handled:
+            break
+            
+        time.sleep(0.5)  # Mengurangi waktu tunggu antara pengecekan
+    
     if permission_handled:
         print("Pop-up perizinan berhasil ditangani.")
     else:
-        print("Tidak ada pop-up perizinan yang terdeteksi atau sudah selesai.")
+        print("Tidak ada pop-up perizinan yang terdeteksi dalam waktu yang ditentukan.")
     
     return permission_handled
 
@@ -476,6 +481,67 @@ def debug_screen_elements(d):
                 print(f"Elemen dengan '{keyword}': {elements.count} ditemukan")
     except Exception as e:
         print(f"Error saat debug: {e}")
+        
+def handle_existing_account_popup(d, timeout=15):
+    """
+    Menangani pop-up dari Instagram Lite ketika email sudah terdaftar di akun lain.
+    Versi yang lebih akurat dengan pendeteksian multi-level.
+    """
+    print("Memeriksa pop-up email sudah terdaftar di Instagram Lite...")
+    
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        # Deteksi utama: Cek elemen spesifik dalam popup
+        if (d(text="This email is on another account").exists or 
+            d(textContains="email is on another account").exists or
+            d(text="Log in to existing account").exists or
+            d(text="Create new account").exists):
+            
+            print("Pop-up email sudah terdaftar terdeteksi")
+            
+            # Versi 1: Coba klik langsung dengan teks (paling reliable)
+            if d(text="Create new account").exists:
+                print("Mengklik tombol 'Create new account' via text...")
+                d(text="Create new account").click()
+                time.sleep(2)
+                return True
+            
+            # Versi 2: Cari berdasarkan struktur ViewGroup yang spesifik
+            # Dari XML, tombol berada dalam struktur ViewGroup tertentu
+            view_groups = d(className="android.view.ViewGroup", clickable=True)
+            for i in range(min(view_groups.count, 20)):  # Batasi pencarian
+                try:
+                    bounds = view_groups[i].info.get('bounds', {})
+                    # Filter berdasarkan posisi tombol (biasanya di bagian bawah popup)
+                    if bounds.get('top', 0) > 800 and bounds.get('height', 0) > 50:
+                        print(f"Found clickable ViewGroup at index {i} with bounds: {bounds}")
+                        view_groups[i].click()
+                        time.sleep(2)
+                        return True
+                except Exception as e:
+                    print(f"Error checking ViewGroup {i}: {e}")
+                    continue
+            
+            # Versi 3: Klik berdasarkan koordinat relatif
+            # Hitung koordinat berdasarkan ukuran layar
+            screen_width = d.info['displayWidth']
+            screen_height = d.info['displayHeight']
+            
+            # Koordinat relatif untuk tombol "Create new account"
+            # Biasanya di bagian bawah tengah popup
+            click_x = screen_width // 2
+            click_y = screen_height * 3 // 4  # 3/4 dari tinggi layar
+            
+            print(f"Mengklik koordinat fallback: {click_x},{click_y}")
+            d.click(click_x, click_y)
+            time.sleep(2)
+            return True
+        
+        time.sleep(0.5)  # Pengecekan lebih sering
+    
+    print("Pop-up email sudah terdaftar tidak terdeteksi")
+    return False
 
 def set_birthday(d, min_age=18, max_age=30):
     print("Set birthday dengan metode 'Enter age instead'...")
@@ -658,7 +724,7 @@ def register_instagram_lite(email, fullname, password):
     print("Membuka aplikasi Instagram Lite...")
     d.app_start("com.instagram.lite")
     time.sleep(5)
-    handle_permission_popup(d)
+    handle_permission_popup(d, timeout=10)
 
     print("Klik tombol 'Create new account' (by text/XPath)...")
     if d(text="Create new account").exists:
@@ -700,9 +766,6 @@ def register_instagram_lite(email, fullname, password):
     if d(text="Next").exists:
         d(text="Next").click()
         next_clicked = True
-    elif d(text="Berikutnya").exists:
-        d(text="Berikutnya").click()
-        next_clicked = True
     elif d(textContains="Next").exists:
         d(textContains="Next").click()
         next_clicked = True
@@ -716,6 +779,8 @@ def register_instagram_lite(email, fullname, password):
     if next_clicked:
         print("Tombol Next berhasil diklik, menunggu halaman berikutnya...")
         time.sleep(5)
+        if not handle_existing_account_popup(d):
+            print("Tidak ada pop-up email terdaftar yang muncul, melanjutkan...")
         debug_screen_elements(d)
     else:
         print("Gagal menemukan tombol Next!")
