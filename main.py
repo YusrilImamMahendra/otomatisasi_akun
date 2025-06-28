@@ -485,14 +485,19 @@ def debug_screen_elements(d):
 def handle_existing_account_popup(d, timeout=15):
     """
     Menangani pop-up dari Instagram Lite ketika email sudah terdaftar di akun lain.
-    Akan menekan tombol "Create new account" pada pop up jika muncul.
+    Akan mengklik tombol "Create new account" pada pop-up jika muncul.
     """
     print("Memeriksa pop-up email sudah terdaftar di Instagram Lite...")
 
     start_time = time.time()
+    xpath_create_new_account = (
+        "//android.widget.FrameLayout[@resource-id=\"com.instagram.lite:id/main_layout\"]"
+        "/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup"
+        "/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup[2]"
+    )
 
     while time.time() - start_time < timeout:
-        # Deteksi utama: Cek elemen spesifik dalam popup
+        # Deteksi pop-up dengan text
         if (
             d(text="This email is on another account").exists or
             d(textContains="email is on another account").exists or
@@ -501,31 +506,21 @@ def handle_existing_account_popup(d, timeout=15):
         ):
             print("Pop-up email sudah terdaftar terdeteksi")
 
-            # Paling direct: klik tombol 'Create new account' by text
+            # Prioritas: klik via xpath (dari kamu)
+            if d.xpath(xpath_create_new_account).exists:
+                print("Mengklik tombol 'Create new account' via XPath!")
+                d.xpath(xpath_create_new_account).click()
+                time.sleep(2)
+                return True
+
+            # Fallback: klik via text
             if d(text="Create new account").exists:
                 print("Mengklik tombol 'Create new account' via text...")
                 d(text="Create new account").click()
                 time.sleep(2)
                 return True
 
-            # Cek tombol "Create new account" via className dan urutan
-            buttons = d(className="android.widget.Button")
-            for i in range(buttons.count):
-                try:
-                    btn = buttons[i]
-                    btn_text = btn.info.get("text", "")
-                    print(f"Button {i}: '{btn_text}'")
-                    if "Create new account" in btn_text:
-                        print("Klik tombol 'Create new account' ditemukan by className!")
-                        btn.click()
-                        time.sleep(2)
-                        return True
-                except Exception as e:
-                    print(f"Error pada Button {i}: {e}")
-
-            # Coba klik fallback: klik posisi pada layar berdasarkan gambar
-            # Pada screenshot, tombol "Create new account" ada di bawah tengah popup
-            # Koordinat kira-kira (dari screenshot, layar 676x1039, tombol bawah tengah)
+            # Fallback lain: klik koordinat (agak kurang reliable)
             try:
                 screen_width = d.info['displayWidth']
                 screen_height = d.info['displayHeight']
@@ -538,7 +533,7 @@ def handle_existing_account_popup(d, timeout=15):
             except Exception as e:
                 print(f"Fallback click error: {e}")
 
-        time.sleep(0.5)  # Pengecekan lebih sering
+        time.sleep(0.5)
 
     print("Pop-up email sudah terdaftar tidak terdeteksi")
     return False
