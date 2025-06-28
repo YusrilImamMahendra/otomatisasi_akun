@@ -167,48 +167,56 @@ def handle_permission_popup(d, timeout=10):
     
     return permission_handled
 
-def get_verification_code_from_email(email_address, email_password, timeout=300, exclude_codes=None):
+def get_verification_code_from_email(email_address, email_password, timeout=120, exclude_codes=None, start_time=None):
+    """
+    Cari kode verifikasi Instagram di email yang diterima SETELAH waktu tertentu.
+    """
     print("Mencari kode verifikasi di email (termasuk folder Sosial)...")
-    start_time = time.time()
-    folders = ['inbox', '[Gmail]/Social', '[Gmail]/Sosial', 'CATEGORY_SOCIAL']
     if exclude_codes is None:
         exclude_codes = []
-    while time.time() - start_time < timeout:
+    if start_time is None:
+        start_time = time.time() - 60  # fallback ke 1 menit ke belakang
+
+    imap_time_format = "%d-%b-%Y"
+    start_struct = time.gmtime(start_time)
+    date_since = time.strftime(imap_time_format, start_struct)
+    print(f"Ambil email setelah tanggal: {date_since}")
+
+    folders = ['inbox', '[Gmail]/Social', '[Gmail]/Sosial', 'CATEGORY_SOCIAL']
+    polling_start = time.time()
+    while time.time() - polling_start < timeout:
         try:
             mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
             mail.login(email_address, email_password)
-            status, allfolders = mail.list()
-            print(f"Semua folder IMAP: {allfolders}")
-            email_found = False
             for folder in folders:
                 try:
-                    result, data = mail.select(folder)
+                    result, _ = mail.select(folder)
                     if result != 'OK':
                         print(f"Folder {folder} tidak ditemukan atau gagal dibuka.")
                         continue
-                    print(f"Mencari di folder: {folder}")
-                    result, data = mail.search(None, 'FROM "Instagram"')
+                    # Ambil email dari Instagram setelah tanggal tertentu
+                    result, data = mail.search(None, '(FROM "Instagram" SINCE "{}")'.format(date_since))
                     if result == 'OK' and data[0]:
                         email_ids = data[0].split()
-                        if email_ids:
-                            email_found = True
-                            latest_email_id = email_ids[-1]
-                            result, data = mail.fetch(latest_email_id, '(RFC822)')
+                        email_ids.reverse()  # Mulai dari yang paling baru
+                        for eid in email_ids:
+                            result, msg_data = mail.fetch(eid, '(RFC822)')
                             if result == 'OK':
-                                raw_email = data[0][1]
+                                raw_email = msg_data[0][1]
                                 email_message = email.message_from_bytes(raw_email)
+                                email_date_tuple = email.utils.parsedate_tz(email_message['Date'])
+                                email_timestamp = email.utils.mktime_tz(email_date_tuple)
+                                if email_timestamp < start_time:
+                                    continue  # Email terlalu lama, skip
                                 subject = email_message.get('Subject', '')
-                                print(f"Subject email: {subject}")
                                 match = re.search(r'\b(\d{6})\b', subject)
                                 if match:
-                                    verification_code = match.group(1)
-                                    if verification_code in exclude_codes:
-                                        print(f"Kode {verification_code} sudah pernah dicoba, skip.")
+                                    code = match.group(1)
+                                    if code in exclude_codes:
                                         continue
-                                    print(f"Kode verifikasi ditemukan di subject: {verification_code}")
-                                    mail.close()
+                                    print(f"Kode verifikasi ditemukan di subject: {code}")
                                     mail.logout()
-                                    return verification_code
+                                    return code
                                 body = ""
                                 if email_message.is_multipart():
                                     for part in email_message.walk():
@@ -217,29 +225,23 @@ def get_verification_code_from_email(email_address, email_password, timeout=300,
                                             break
                                 else:
                                     body = email_message.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                print(f"Isi email (untuk debug): {body[:200]}")
                                 match = re.search(r'\b(\d{6})\b', body)
                                 if match:
-                                    verification_code = match.group(1)
-                                    if verification_code in exclude_codes:
-                                        print(f"Kode {verification_code} sudah pernah dicoba, skip.")
+                                    code = match.group(1)
+                                    if code in exclude_codes:
                                         continue
-                                    print(f"Kode verifikasi ditemukan di body: {verification_code}")
-                                    mail.close()
+                                    print(f"Kode verifikasi ditemukan di body: {code}")
                                     mail.logout()
-                                    return verification_code
+                                    return code
                 except Exception as e:
-                    print(f"Error saat cek folder {folder}: {e}")
+                    print(f"Error cek folder {folder}: {e}")
                     continue
-            mail.close()
             mail.logout()
-            if not email_found:
-                print("Belum ditemukan email kode verifikasi di folder mana pun.")
         except Exception as e:
             print(f"Error saat membaca email: {e}")
-        print("Kode verifikasi belum ditemukan, menunggu 10 detik...")
-        time.sleep(10)
-    print("Timeout: Kode verifikasi tidak ditemukan dalam waktu yang ditentukan")
+        print("Kode verifikasi belum ditemukan, menunggu 5 detik...")
+        time.sleep(5)
+    print("Timeout: Tidak menemukan kode verifikasi baru!")
     return None
 
 def manual_input_verification_code():
@@ -254,7 +256,7 @@ def manual_input_verification_code():
         else:
             print("Kode harus 6 digit angka. Silakan coba lagi.")
 
-def handle_email_verification(d, max_attempts=3):
+def handle_email_verification(d, max_attempts=3, kode_start_time=None):
     print("Mendeteksi halaman verifikasi email...")
     verification_detected = False
     for attempt in range(60):
@@ -288,9 +290,12 @@ def handle_email_verification(d, max_attempts=3):
     for attempt in range(max_attempts):
         print(f"Percobaan verifikasi kode ke-{attempt+1}...")
         verification_code = None
+        # Ambil kode verifikasi dengan filter waktu
         if EMAIL_PASSWORD:
             print("Mencoba mengambil kode verifikasi dari email...")
-            verification_code = get_verification_code_from_email(EMAIL, EMAIL_PASSWORD, timeout=90, exclude_codes=exclude_codes)
+            verification_code = get_verification_code_from_email(
+                EMAIL, EMAIL_PASSWORD, timeout=90, exclude_codes=exclude_codes, start_time=kode_start_time
+            )
         if not verification_code:
             verification_code = manual_input_verification_code()
         exclude_codes.append(verification_code)
@@ -526,7 +531,7 @@ def set_birthday(d, min_age=18, max_age=30):
     print("Set birthday dengan metode 'Enter age instead'...")
 
     # 1. Klik tombol Next (XPath)
-    xpath_next = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    xpath_next = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup[3]'
     for _ in range(10):
         if d.xpath(xpath_next).exists:
             d.xpath(xpath_next).click()
@@ -537,9 +542,16 @@ def set_birthday(d, min_age=18, max_age=30):
     else:
         print("Tombol Next pada birthday tidak ditemukan!")
         return
+    
+    for _ in range(10):
+        if d(text="Next").exists:
+            print("Tombol Next ditemukan by text, mengklik...")
+            d(text="Next").click()
+            time.sleep(2)
+            return
 
     # 2. Tunggu pop up 'Enter your real birthday' dan klik OK
-    xpath_OK = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup'
+    xpath_OK = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[5]/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup'
     for _ in range(10):
         if d.xpath(xpath_OK).exists:
             d.xpath(xpath_OK).click()
@@ -551,7 +563,7 @@ def set_birthday(d, min_age=18, max_age=30):
         print("Pop up OK tidak muncul.")
 
     # 3. Tunggu tombol "Enter age instead" muncul, lalu klik (XPath)
-    xpath_enter_age = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.View[6]'
+    xpath_enter_age = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.View[6]'
     for _ in range(10):
         if d.xpath(xpath_enter_age).exists:
             # kadang tombol tidak langsung bisa di-klik, pastikan visible dan enabled
@@ -708,10 +720,10 @@ def register_instagram_lite(email, fullname, password):
     print("Klik tombol 'Create new account' (by text/XPath)...")
     if d(text="Create new account").exists:
         d(text="Create new account").click()
-        time.sleep(2)
+        time.sleep(5)
     elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[1]').exists:
         d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[1]').click()
-        time.sleep(2)
+        time.sleep(5)
     else:
         print("Tombol 'Create new account' tidak ditemukan! (text/XPath)")
         debug_screen_elements(d)
@@ -720,10 +732,10 @@ def register_instagram_lite(email, fullname, password):
     print("Klik tombol 'Sign up with email' (by text/XPath)...")
     if d(text="Sign up with email").exists:
         d(text="Sign up with email").click()
-        time.sleep(2)
+        time.sleep(3)
     elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]').exists:
         d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]').click()
-        time.sleep(2)
+        time.sleep(3)
     else:
         print("Tombol 'Sign up with email' tidak ditemukan! (text/XPath)")
         debug_screen_elements(d)
@@ -825,7 +837,7 @@ def register_instagram_lite(email, fullname, password):
     print("Masuk ke halaman birthday, mengisi tanggal lahir...")
     set_birthday(d)
     
-    xpath_next_ready = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[6]'
+    xpath_next_ready = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup[6]'
     for _ in range(10):
         if d.xpath(xpath_next_ready).exists:
             d.xpath(xpath_next_ready).click()
@@ -841,6 +853,25 @@ def register_instagram_lite(email, fullname, password):
     else:
         print("Tombol Next pada halaman 'account is almost ready' tidak ditemukan!")
     time.sleep(3)
+    
+    print("Cek apakah muncul halaman 'Add a profile photo'...")
+    for _ in range(10):
+        # Coba klik tombol Skip by text
+        if d(text="Skip").exists:
+            print("Tombol Skip pada halaman Add a profile photo ditemukan by text. Mengklik...")
+            d(text="Skip").click()
+            time.sleep(2)
+            break
+        # Coba klik tombol Skip by XPath (dari user)
+        elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup[3]').exists:
+            print("Tombol Skip pada halaman Add a profile photo ditemukan by XPath. Mengklik...")
+            d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.ViewGroup[3]').click()
+            time.sleep(2)
+            break
+        print("Tombol Skip belum muncul di halaman Add a profile photo, retrying...")
+        time.sleep(1)
+    else:
+        print("Tombol Skip pada halaman Add a profile photo tidak ditemukan!")
     
     xpath_skip_contacts = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
     for _ in range(10):
