@@ -1,12 +1,10 @@
-import os
+import os, string
 import subprocess
 import time
 import uiautomator2 as u2
-import imaplib
-import email
-import re
 import uuid
 import random
+from gmail_api_utils import get_verification_code_from_email_gmail_api
 
 # KONFIGURASI PATH DAN DEVICE UNTUK LDPLAYER
 LDPLAYER_EXE_PATH = r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
@@ -15,13 +13,25 @@ LDPLAYER_DEVICE = "emulator-5554"
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "cobaja.1933@gmail.com"
-EMAIL_PASSWORD = "hpxifkmjcxzmjrrq"
-FULLNAME = "yaboyunikssss12345"
-PASSWORD = "PasswordKuat2025"
+#EMAIL_PASSWORD = "hpxifkmjcxzmjrrq"#
+
 
 # Konfigurasi IMAP untuk Gmail
-IMAP_SERVER = "imap.gmail.com"
-IMAP_PORT = 993
+#IMAP_SERVER = "imap.gmail.com"
+#IMAP_PORT = 993
+
+def generate_random_fullname(length=10):
+    # Membuat username random, misal: "user123abc"
+    chars = string.ascii_lowercase + string.digits
+    return 'user' + ''.join(random.choices(chars, k=length))
+
+def generate_random_password(length=12):
+    # Kombinasi huruf besar, kecil, angka, dan simbol
+    chars = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(random.choices(chars, k=length))
+
+FULLNAME = generate_random_fullname()
+PASSWORD = generate_random_password()
 
 def start_ldplayer_and_connect_adb():
     print("Menjalankan emulator LDPlayer...")
@@ -167,83 +177,6 @@ def handle_permission_popup(d, timeout=10):
     
     return permission_handled
 
-def get_verification_code_from_email(email_address, email_password, timeout=120, exclude_codes=None, start_time=None):
-    """
-    Cari kode verifikasi Instagram di email yang diterima SETELAH waktu tertentu.
-    """
-    print("Mencari kode verifikasi di email (termasuk folder Sosial)...")
-    if exclude_codes is None:
-        exclude_codes = []
-    if start_time is None:
-        start_time = time.time() - 60  # fallback ke 1 menit ke belakang
-
-    imap_time_format = "%d-%b-%Y"
-    start_struct = time.gmtime(start_time)
-    date_since = time.strftime(imap_time_format, start_struct)
-    print(f"Ambil email setelah tanggal: {date_since}")
-
-    folders = ['inbox', '[Gmail]/Social', '[Gmail]/Sosial', 'CATEGORY_SOCIAL']
-    polling_start = time.time()
-    while time.time() - polling_start < timeout:
-        try:
-            mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
-            mail.login(email_address, email_password)
-            for folder in folders:
-                try:
-                    result, _ = mail.select(folder)
-                    if result != 'OK':
-                        print(f"Folder {folder} tidak ditemukan atau gagal dibuka.")
-                        continue
-                    # Ambil email dari Instagram setelah tanggal tertentu
-                    result, data = mail.search(None, '(FROM "Instagram" SINCE "{}")'.format(date_since))
-                    if result == 'OK' and data[0]:
-                        email_ids = data[0].split()
-                        email_ids.reverse()  # Mulai dari yang paling baru
-                        for eid in email_ids:
-                            result, msg_data = mail.fetch(eid, '(RFC822)')
-                            if result == 'OK':
-                                raw_email = msg_data[0][1]
-                                email_message = email.message_from_bytes(raw_email)
-                                email_date_tuple = email.utils.parsedate_tz(email_message['Date'])
-                                email_timestamp = email.utils.mktime_tz(email_date_tuple)
-                                if email_timestamp < start_time:
-                                    continue  # Email terlalu lama, skip
-                                subject = email_message.get('Subject', '')
-                                match = re.search(r'\b(\d{6})\b', subject)
-                                if match:
-                                    code = match.group(1)
-                                    if code in exclude_codes:
-                                        continue
-                                    print(f"Kode verifikasi ditemukan di subject: {code}")
-                                    mail.logout()
-                                    return code
-                                body = ""
-                                if email_message.is_multipart():
-                                    for part in email_message.walk():
-                                        if part.get_content_type() == "text/plain":
-                                            body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                            break
-                                else:
-                                    body = email_message.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                match = re.search(r'\b(\d{6})\b', body)
-                                if match:
-                                    code = match.group(1)
-                                    if code in exclude_codes:
-                                        continue
-                                    print(f"Kode verifikasi ditemukan di body: {code}")
-                                    mail.logout()
-                                    return code
-                except Exception as e:
-                    print(f"Error cek folder {folder}: {e}")
-                    continue
-            mail.logout()
-        except Exception as e:
-            print(f"Error saat membaca email: {e}")
-        print("Kode verifikasi belum ditemukan, menunggu 5 detik...")
-        time.sleep(5)
-    print("Timeout: Tidak menemukan kode verifikasi baru!")
-    return None
-
 def manual_input_verification_code():
     print("\n" + "="*50)
     print("PERHATIAN: Tidak dapat mengambil kode verifikasi otomatis")
@@ -289,17 +222,12 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
     exclude_codes = []
     for attempt in range(max_attempts):
         print(f"Percobaan verifikasi kode ke-{attempt+1}...")
-        verification_code = None
-        # Ambil kode verifikasi dengan filter waktu
-        if EMAIL_PASSWORD:
-            print("Mencoba mengambil kode verifikasi dari email...")
-            verification_code = get_verification_code_from_email(
-                EMAIL, EMAIL_PASSWORD, timeout=90, exclude_codes=exclude_codes, start_time=kode_start_time
-            )
+        verification_code = get_verification_code_from_email_gmail_api(
+            timeout=90, exclude_codes=exclude_codes, start_time=kode_start_time
+        )
         if not verification_code:
             verification_code = manual_input_verification_code()
         exclude_codes.append(verification_code)
-
         print(f"Memasukkan kode verifikasi: {verification_code}")
 
         # Isi field kode
@@ -315,7 +243,6 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
         ]
         for resource_id in possible_resource_ids:
             if d(resourceId=resource_id).exists:
-                print(f"Menemukan field dengan resource ID: {resource_id}")
                 try:
                     code_field = d(resourceId=resource_id)
                     code_field.click()
@@ -326,26 +253,16 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
                     time.sleep(1)
                     current_text = code_field.get_text()
                     if verification_code in current_text or len(current_text) == 6:
-                        print("Kode berhasil dimasukkan!")
                         success = True
                         break
                 except Exception as e:
                     print(f"Error pada resource ID {resource_id}: {e}")
                     continue
-
         if not success:
-            print("Mencari melalui semua EditText...")
             edit_texts = d(className="android.widget.EditText")
-            print(f"Ditemukan {edit_texts.count} EditText")
             for i in range(edit_texts.count):
                 try:
                     field = edit_texts[i]
-                    field_info = field.info
-                    bounds = field_info.get('bounds', {})
-                    current_text = field_info.get('text', '')
-                    print(f"EditText {i}: bounds={bounds}, text='{current_text}'")
-                    if current_text and len(current_text) > 10:
-                        continue
                     field.click()
                     time.sleep(0.5)
                     field.clear_text()
@@ -354,24 +271,15 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
                     time.sleep(1)
                     updated_text = field.get_text()
                     if verification_code in updated_text or len(updated_text.strip()) == 6:
-                        print(f"Berhasil mengisi kode di EditText {i}")
                         success = True
                         break
-                    else:
-                        print(f"Gagal mengisi EditText {i} (text sekarang: '{updated_text}')")
                 except Exception as e:
-                    print(f"Error pada EditText {i}: {e}")
                     continue
-
         if not success:
-            print("Mencari melalui MultiAutoCompleteTextView...")
             mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-            print(f"Ditemukan {mac_fields.count} MultiAutoCompleteTextView")
             for i in range(mac_fields.count):
                 try:
                     field = mac_fields[i]
-                    field_info = field.info
-                    print(f"MultiAutoCompleteTextView {i}: bounds={field_info.get('bounds')}, text='{field_info.get('text', '')}'")
                     field.click()
                     time.sleep(0.5)
                     field.clear_text()
@@ -380,18 +288,12 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
                     time.sleep(1)
                     current_text = field.get_text()
                     if verification_code in current_text or len(current_text.strip()) == 6:
-                        print(f"Berhasil mengisi kode di MultiAutoCompleteTextView {i}")
                         success = True
                         break
-                    else:
-                        print(f"Gagal mengisi MultiAutoCompleteTextView {i}, mencoba yang lain...")
                 except Exception as e:
-                    print(f"Error pada MultiAutoCompleteTextView {i}: {e}")
                     continue
-
         if not success:
-            print("Mencoba input dengan koordinat berdasarkan gambar...")
-            x, y = 450, 180  # Koordinat perkiraan untuk field kode
+            x, y = 450, 180
             d.click(x, y)
             time.sleep(1)
             d.long_click(x, y)
@@ -404,51 +306,34 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
             time.sleep(0.5)
             d.send_keys(verification_code)
             time.sleep(1)
-            print("Kode dimasukkan menggunakan koordinat")
             success = True
-
         if success:
-            # Klik tombol Next dengan koordinat berdasarkan gambar
-            print("Mengklik tombol Next untuk mengirim kode verifikasi...")
-            next_x, next_y = 450, 400  # Koordinat perkiraan untuk tombol Next
+            next_x, next_y = 450, 400
             d.click(next_x, next_y)
-            print("Tombol Next diklik berdasarkan koordinat.")
             time.sleep(3)
-
-            # Cek apakah kode valid
             if d(textContains="That code isn't valid").exists:
-                print("Kode tidak valid, akan melakukan resend code.")
                 if wait_and_click(d, text="I didn't get the code", timeout=5):
-                    print("Tombol 'I didn't get the code' berhasil diklik.")
                     time.sleep(2)
                     if wait_and_click(d, text="Resend confirmation code", timeout=5):
-                        print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
                         time.sleep(10)
                         exclude_codes.append(verification_code)
                         continue
                     else:
-                        print("Opsi 'Resend confirmation code' tidak ditemukan!")
                         return False
                 else:
-                    print("Tombol 'I didn't get the code' tidak ditemukan berdasarkan teks, mencoba koordinat...")
                     d.click(450, 600)
                     time.sleep(2)
                     if wait_and_click(d, text="Resend confirmation code", timeout=5):
-                        print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
                         time.sleep(10)
                         exclude_codes.append(verification_code)
                         continue
                     else:
-                        print("Gagal menemukan atau mengklik 'Resend confirmation code'!")
                         return False
             else:
                 mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
                 if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
-                    print("Masih di halaman verifikasi kode, kemungkinan kode salah.")
                     continue
-                print("Verifikasi email berhasil!")
                 return True
-
     print("Gagal verifikasi kode setelah beberapa percobaan.")
     return False
 
