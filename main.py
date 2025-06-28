@@ -485,57 +485,40 @@ def debug_screen_elements(d):
 def handle_existing_account_popup(d, timeout=15):
     """
     Menangani pop-up dari Instagram Lite ketika email sudah terdaftar di akun lain.
-    Akan mengklik tombol "Create new account" pada pop-up jika muncul.
+    WAJIB klik tombol 'Create new account' via XPath sebelum lanjut.
     """
     print("Memeriksa pop-up email sudah terdaftar di Instagram Lite...")
 
-    start_time = time.time()
     xpath_create_new_account = (
         "//android.widget.FrameLayout[@resource-id=\"com.instagram.lite:id/main_layout\"]"
         "/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup"
         "/android.view.ViewGroup/android.view.ViewGroup/android.view.ViewGroup[2]"
     )
 
+    start_time = time.time()
     while time.time() - start_time < timeout:
-        # Deteksi pop-up dengan text
-        if (
-            d(text="This email is on another account").exists or
+        # Cek apakah popup muncul
+        if (d(text="This email is on another account").exists or
             d(textContains="email is on another account").exists or
-            d(text="Log in to existing account").exists or
-            d(text="Create new account").exists
-        ):
-            print("Pop-up email sudah terdaftar terdeteksi")
-
-            # Prioritas: klik via xpath (dari kamu)
+            d.xpath(xpath_create_new_account).exists):
+            print("Popup 'email is on another account' Terdeteksi")
+            # Klik tombol "Create new account" via XPath AKURAT
             if d.xpath(xpath_create_new_account).exists:
-                print("Mengklik tombol 'Create new account' via XPath!")
+                print("Klik tombol 'Create new account' (XPath)")
                 d.xpath(xpath_create_new_account).click()
                 time.sleep(2)
-                return True
-
-            # Fallback: klik via text
-            if d(text="Create new account").exists:
-                print("Mengklik tombol 'Create new account' via text...")
-                d(text="Create new account").click()
-                time.sleep(2)
-                return True
-
-            # Fallback lain: klik koordinat (agak kurang reliable)
-            try:
-                screen_width = d.info['displayWidth']
-                screen_height = d.info['displayHeight']
-                click_x = int(screen_width / 2)
-                click_y = int(screen_height * 0.67)  # 2/3 ke bawah layar
-                print(f"Mengklik koordinat fallback (bawah tengah popup): {click_x}, {click_y}")
-                d.click(click_x, click_y)
-                time.sleep(2)
-                return True
-            except Exception as e:
-                print(f"Fallback click error: {e}")
-
+                # Tunggu popup benar-benar hilang sebelum lanjut
+                for _ in range(10):
+                    if not d.xpath(xpath_create_new_account).exists:
+                        print("Popup sudah hilang.")
+                        return True
+                    time.sleep(0.5)
+                print("Popup belum hilang setelah klik. Coba lagi...")
+            else:
+                print("XPath 'Create new account' tidak ditemukan. Debug UI...")
         time.sleep(0.5)
 
-    print("Pop-up email sudah terdaftar tidak terdeteksi")
+    print("Pop-up email sudah terdaftar tidak terdeteksi atau gagal klik.")
     return False
 
 
@@ -774,12 +757,12 @@ def register_instagram_lite(email, fullname, password):
         next_clicked = True
     if next_clicked:
         print("Tombol Next berhasil diklik, menunggu halaman berikutnya...")
-        time.sleep(3)  # Ubah 5 ke 3 (biar cepat deteksi popup)
-        # Cek dan handle pop up email sudah terdaftar (WAJIB panggil di sini)
-        if handle_existing_account_popup(d, timeout=7):  # timeout lebih agresif
+        time.sleep(2)
+    # WAJIB: Tunggu dan handle popup jika muncul
+        handled = handle_existing_account_popup(d, timeout=10)
+        if handled:
             print("Popup existing account berhasil dihandle, lanjutkan registrasi.")
-            # Setelah klik "Create new account", beri delay agar popup hilang
-            time.sleep(2)
+            time.sleep(1)
         else:
             print("Tidak ada pop-up email terdaftar yang muncul, melanjutkan...")
         debug_screen_elements(d)
