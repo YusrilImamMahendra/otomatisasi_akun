@@ -36,19 +36,26 @@ PASSWORD = generate_random_password()
 def start_ldplayer_and_connect_adb():
     print("Menjalankan emulator LDPlayer...")
     subprocess.Popen([LDPLAYER_EXE_PATH])
-    # Tunggu emulator benar-benar berjalan dan terdeteksi oleh ADB
     max_wait = 180  # detik
     wait_time = 0
+    offline_count = 0
     while wait_time < max_wait:
         out = subprocess.getoutput(f'"{ADB_PATH}" devices')
         print("ADB devices output:", out)
         lines = out.splitlines()
+        found_online = False
         for line in lines:
             if "device" in line and "offline" not in line and "List of devices" not in line:
                 print(f"Emulator siap, adb sudah terhubung sebagai: {line.strip()}")
                 global LDPLAYER_DEVICE
                 LDPLAYER_DEVICE = line.split()[0]
                 return
+            if "offline" in line:
+                offline_count += 1
+        if offline_count > 5:
+            print("Device selalu offline, kemungkinan ada masalah dengan ADB/LDPlayer.")
+            print("Cek apakah LDPlayer sudah benar-benar running, atau coba restart ADB dan emulator.")
+            raise RuntimeError("Device ADB selalu offline. Proses dihentikan.")
         print("ADB belum terhubung ke emulator, mencoba connect ke port umum LDPlayer...")
         for port in [5554, 5555, 5556, 62001]:
             os.system(f'"{ADB_PATH}" connect 127.0.0.1:{port}')
@@ -531,13 +538,15 @@ def install_instagram_lite():
     print("Membuka Google Play Store...")
     d.app_start("com.android.vending")
     time.sleep(4)
+    inspect_ui_elements(d)
     print("Klik search bar di bagian atas (LDPlayer)...")
     d.click(350, 60)
     time.sleep(2)
     d.send_keys("Instagram Lite")
-    time.sleep(1)
+    time.sleep(3)
     d.press("enter")
     time.sleep(3)
+    inspect_ui_elements(d)
     print("Klik tombol Install di panel kanan (detail aplikasi, via XPath)...")
     xpath_install = '//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View[2]/android.view.View/android.view.View[1]/android.view.View[5]/android.widget.Button[2]'
     if d.xpath(xpath_install).exists:
@@ -552,31 +561,31 @@ def install_instagram_lite():
         return False
     
     print("Menunggu proses install selesai (tombol Buka muncul)...")
-    for _ in range(60):
+    for _ in range(120):
         # Tambahkan pengecekan tombol Open dengan XPath yang diberikan
         xpath_open = '//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View[2]/android.view.View/android.view.View[1]/android.view.View[5]/android.widget.Button'
         if d.xpath(xpath_open).exists:
             print("Tombol Open ditemukan via XPath, mengklik...")
             d.xpath(xpath_open).click()
-            time.sleep(3)
+            time.sleep(5)
             # Handle permission popup setelah membuka aplikasi
             handle_permission_popup(d)
             return True
         elif d(text="Open").exists:
             print("Tombol Open ditemukan via text, mengklik...")
             d(text="Open").click()
-            time.sleep(3)
+            time.sleep(5)
             # Handle permission popup setelah membuka aplikasi
             handle_permission_popup(d)
             return True
         elif d(text="Buka").exists:
             print("Tombol Buka ditemukan, mengklik...")
             d(text="Buka").click()
-            time.sleep(3)
+            time.sleep(5)
             # Handle permission popup setelah membuka aplikasi
             handle_permission_popup(d)
             return True
-        time.sleep(2)
+        time.sleep(4)
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
     inspect_ui_elements(d)
     return False
@@ -591,27 +600,27 @@ def register_instagram_lite(email, fullname, password):
     print("Inspect elemen setelah aplikasi dibuka:")
     inspect_ui_elements(d)
 
-    print("Klik tombol 'Create new account' (by text/XPath)...")
-    if d(text="Create new account").exists:
-        d(text="Create new account").click()
-        time.sleep(5)
-    elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[1]').exists:
-        d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[1]').click()
-        time.sleep(5)
+    print("Klik tombol 'Create new account' (by text)...")
+    for _ in range(10):
+        if d(text="Create new account").exists:
+            d(text="Create new account").click()
+            time.sleep(3)
+            break
+        time.sleep(1)
     else:
-        print("Tombol 'Create new account' tidak ditemukan! (text/XPath)")
+        print("Tombol 'Create new account' tidak ditemukan!")
         inspect_ui_elements(d)
         return
 
-    print("Klik tombol 'Sign up with email' (by text/XPath)...")
-    if d(text="Sign up with email").exists:
-        d(text="Sign up with email").click()
-        time.sleep(3)
-    elif d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]').exists:
-        d.xpath('//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]').click()
-        time.sleep(3)
+    print("Klik tombol 'Sign up with email' (by text)...")
+    for _ in range(10):
+        if d(text="Sign up with email").exists:
+            d(text="Sign up with email").click()
+            time.sleep(2)
+            break
+        time.sleep(1)
     else:
-        print("Tombol 'Sign up with email' tidak ditemukan! (text/XPath)")
+        print("Tombol 'Sign up with email' tidak ditemukan!")
         inspect_ui_elements(d)
         return
     print("Mengisi field email...")
