@@ -23,7 +23,7 @@ EMAIL = "cobaja.1933@gmail.com"
 def generate_random_fullname(length=10):
     # Membuat username random, misal: "user123abc"
     chars = string.ascii_lowercase + string.digits
-    return 'user' + ''.join(random.choices(chars, k=length))
+    return 'soap' + ''.join(random.choices(chars, k=length))
 
 def generate_random_password(length=12):
     # Kombinasi huruf besar, kecil, angka, dan simbol
