@@ -223,18 +223,20 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
         return False
 
     time.sleep(2)
-    print("=== DEBUG: Mencari field kode verifikasi ===")
-    inspect_ui_elements(d)
 
     exclude_codes = []
     for attempt in range(max_attempts):
         print(f"Percobaan verifikasi kode ke-{attempt+1}...")
+        verification_code = None
+        # Ambil kode verifikasi dengan filter waktu
+        print("Mencoba mengambil kode verifikasi dari email...")
         verification_code = get_verification_code_from_email_gmail_api(
-            timeout=90, exclude_codes=exclude_codes, start_time=kode_start_time
+        EMAIL, timeout=90, exclude_codes=exclude_codes, start_time=kode_start_time
         )
         if not verification_code:
             verification_code = manual_input_verification_code()
         exclude_codes.append(verification_code)
+
         print(f"Memasukkan kode verifikasi: {verification_code}")
 
         # Isi field kode
@@ -250,6 +252,7 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
         ]
         for resource_id in possible_resource_ids:
             if d(resourceId=resource_id).exists:
+                print(f"Menemukan field dengan resource ID: {resource_id}")
                 try:
                     code_field = d(resourceId=resource_id)
                     code_field.click()
@@ -260,16 +263,26 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
                     time.sleep(1)
                     current_text = code_field.get_text()
                     if verification_code in current_text or len(current_text) == 6:
+                        print("Kode berhasil dimasukkan!")
                         success = True
                         break
                 except Exception as e:
                     print(f"Error pada resource ID {resource_id}: {e}")
                     continue
+
         if not success:
+            print("Mencari melalui semua EditText...")
             edit_texts = d(className="android.widget.EditText")
+            print(f"Ditemukan {edit_texts.count} EditText")
             for i in range(edit_texts.count):
                 try:
                     field = edit_texts[i]
+                    field_info = field.info
+                    bounds = field_info.get('bounds', {})
+                    current_text = field_info.get('text', '')
+                    print(f"EditText {i}: bounds={bounds}, text='{current_text}'")
+                    if current_text and len(current_text) > 10:
+                        continue
                     field.click()
                     time.sleep(0.5)
                     field.clear_text()
@@ -278,15 +291,24 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
                     time.sleep(1)
                     updated_text = field.get_text()
                     if verification_code in updated_text or len(updated_text.strip()) == 6:
+                        print(f"Berhasil mengisi kode di EditText {i}")
                         success = True
                         break
+                    else:
+                        print(f"Gagal mengisi EditText {i} (text sekarang: '{updated_text}')")
                 except Exception as e:
+                    print(f"Error pada EditText {i}: {e}")
                     continue
+
         if not success:
+            print("Mencari melalui MultiAutoCompleteTextView...")
             mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
+            print(f"Ditemukan {mac_fields.count} MultiAutoCompleteTextView")
             for i in range(mac_fields.count):
                 try:
                     field = mac_fields[i]
+                    field_info = field.info
+                    print(f"MultiAutoCompleteTextView {i}: bounds={field_info.get('bounds')}, text='{field_info.get('text', '')}'")
                     field.click()
                     time.sleep(0.5)
                     field.clear_text()
@@ -295,12 +317,18 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
                     time.sleep(1)
                     current_text = field.get_text()
                     if verification_code in current_text or len(current_text.strip()) == 6:
+                        print(f"Berhasil mengisi kode di MultiAutoCompleteTextView {i}")
                         success = True
                         break
+                    else:
+                        print(f"Gagal mengisi MultiAutoCompleteTextView {i}, mencoba yang lain...")
                 except Exception as e:
+                    print(f"Error pada MultiAutoCompleteTextView {i}: {e}")
                     continue
+
         if not success:
-            x, y = 450, 180
+            print("Mencoba input dengan koordinat berdasarkan gambar...")
+            x, y = 450, 180  # Koordinat perkiraan untuk field kode
             d.click(x, y)
             time.sleep(1)
             d.long_click(x, y)
@@ -313,51 +341,83 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
             time.sleep(0.5)
             d.send_keys(verification_code)
             time.sleep(1)
+            print("Kode dimasukkan menggunakan koordinat")
             success = True
+
         if success:
-            next_x, next_y = 450, 400
+            # Klik tombol Next dengan koordinat berdasarkan gambar
+            print("Mengklik tombol Next untuk mengirim kode verifikasi...")
+            next_x, next_y = 450, 400  # Koordinat perkiraan untuk tombol Next
             d.click(next_x, next_y)
+            print("Tombol Next diklik berdasarkan koordinat.")
             time.sleep(3)
+
+            # Cek apakah kode valid
             if d(textContains="That code isn't valid").exists:
+                print("Kode tidak valid, akan melakukan resend code.")
                 if wait_and_click(d, text="I didn't get the code", timeout=5):
+                    print("Tombol 'I didn't get the code' berhasil diklik.")
                     time.sleep(2)
                     if wait_and_click(d, text="Resend confirmation code", timeout=5):
+                        print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
                         time.sleep(10)
                         exclude_codes.append(verification_code)
                         continue
                     else:
+                        print("Opsi 'Resend confirmation code' tidak ditemukan!")
                         return False
                 else:
+                    print("Tombol 'I didn't get the code' tidak ditemukan berdasarkan teks, mencoba koordinat...")
                     d.click(450, 600)
                     time.sleep(2)
                     if wait_and_click(d, text="Resend confirmation code", timeout=5):
+                        print("Opsi 'Resend confirmation code' diklik, menunggu kode baru...")
                         time.sleep(10)
                         exclude_codes.append(verification_code)
                         continue
                     else:
+                        print("Gagal menemukan atau mengklik 'Resend confirmation code'!")
                         return False
             else:
                 mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
                 if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
+                    print("Masih di halaman verifikasi kode, kemungkinan kode salah.")
                     continue
+                print("Verifikasi email berhasil!")
                 return True
+
     print("Gagal verifikasi kode setelah beberapa percobaan.")
     return False
 
-def inspect_ui_elements(d):
-    print("======= UI Elements Inspector =======")
+def inspect_ui_elements(d, filter_texts=None, max_print=20):
+    print("======= UI Elements Inspector (Filtered) =======")
     try:
         nodes = d.xpath("//*").all()
         print(f"Total elements found: {len(nodes)}")
-        for node in nodes:
-            info = node.attrib
-            print("xpath:", node.xpath)
-            print(" resource-id:", info.get('resource-id', ''))
-            print(" class:", info.get('class', ''))
-            print(" text:", info.get('text', ''))
-            print(" content-desc:", info.get('content-desc', ''))
-            print(" bounds:", info.get('bounds', ''))
+        count = 0
+        for idx, node in enumerate(nodes):
+            info = getattr(node, "attrib", {})
+            text = info.get('text', '')
+            resource_id = info.get('resource-id', '')
+            class_name = info.get('class', '')
+
+            # Tampilkan hanya elemen dengan text, atau resource-id, atau class tombol (button/view)
+            if filter_texts:
+                if not any(f.lower() in (text or '').lower() for f in filter_texts):
+                    continue
+            if not (text or resource_id or "button" in class_name.lower()):
+                continue
+            print(f"Element #{idx+1}")
+            print("  class:", class_name)
+            print("  resource-id:", resource_id)
+            print("  text:", text)
+            print("  bounds:", info.get('bounds', ''))
+            count += 1
             print("-" * 30)
+            if count >= max_print:
+                break
+        if count == 0:
+            print("No matching elements found.")
     except Exception as e:
         print(f"Error saat inspect UI: {e}")
 
@@ -598,44 +658,61 @@ def register_instagram_lite(email, fullname, password):
     handle_permission_popup(d, timeout=10)
 
     print("Inspect elemen setelah aplikasi dibuka:")
-    inspect_ui_elements(d)
+    inspect_ui_elements(d, filter_texts=["create", "account", "button"])
 
-    print("Klik tombol 'Create new account' (by text)...")
-    for _ in range(10):
-        if d(text="Create new account").exists:
-            d(text="Create new account").click()
-            time.sleep(3)
-            break
-        time.sleep(1)
+    print("Klik tombol 'Create new account'")
+    xpath_create_new_account = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]'
+    if d.xpath(xpath_create_new_account).exists:
+        d.xpath(xpath_create_new_account).click()
+        print("Tombol 'Create new account' berhasil diklik via XPath.")
+        time.sleep(2)
     else:
         print("Tombol 'Create new account' tidak ditemukan!")
-        inspect_ui_elements(d)
+        inspect_ui_elements(d, filter_texts=["create", "account", "button"])
         return
 
-    print("Klik tombol 'Sign up with email' (by text)...")
+    print("Klik tombol 'Sign up with email'")
+    xpath_signup_email = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    if d.xpath(xpath_signup_email).exists:
+        d.xpath(xpath_signup_email).click()
+        print("Tombol 'Sign up with email' berhasil diklik via XPath.")
+        time.sleep(2)
+    else:
+        found = False
+        for _ in range(5):
+            if d(text="Sign up with email").exists:
+                d(text="Sign up with email").click()
+                print("Tombol 'Sign up with email' berhasil diklik via text.")
+                found = True
+                time.sleep(2)
+                break
+            elif d(textContains="email").exists:
+                d(textContains="email").click()
+                print("Tombol 'Sign up with email' berhasil diklik via textContains.")
+                found = True
+                time.sleep(2)
+                break
+            time.sleep(1)
+        if not found:
+            print("Tombol 'Sign up with email' tidak ditemukan!")
+            inspect_ui_elements(d, filter_texts=["email"])
+            return
+
+    print("Mengisi field email...")
     for _ in range(10):
-        if d(text="Sign up with email").exists:
-            d(text="Sign up with email").click()
+        email_field = d(className="android.widget.MultiAutoCompleteTextView")
+        if email_field.exists:
+            email_field.clear_text()
+            time.sleep(0.5)
+            email_field.set_text(email)
             time.sleep(2)
+            print(f"Email '{email}' berhasil diisi")
             break
         time.sleep(1)
     else:
-        print("Tombol 'Sign up with email' tidak ditemukan!")
-        inspect_ui_elements(d)
-        return
-    print("Mengisi field email...")
-    email_field = d(className="android.widget.MultiAutoCompleteTextView")
-    if email_field.exists:
-        email_field.clear_text()
-        time.sleep(0.5)
-        email_field.set_text(email)
-        time.sleep(2)
-        print(f"Email '{email}' berhasil diisi")
-    else:
         print("Field email tidak ditemukan!")
-        inspect_ui_elements(d)
+        inspect_ui_elements(d, filter_texts=["email"])
         return
-    inspect_ui_elements(d)
     print("Mencari tombol Next...")
     next_clicked = False
     if d(text="Next").exists:
