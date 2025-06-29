@@ -217,7 +217,7 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
 
     time.sleep(2)
     print("=== DEBUG: Mencari field kode verifikasi ===")
-    debug_screen_elements(d)
+    inspect_ui_elements(d)
 
     exclude_codes = []
     for attempt in range(max_attempts):
@@ -337,41 +337,23 @@ def handle_email_verification(d, max_attempts=3, kode_start_time=None):
     print("Gagal verifikasi kode setelah beberapa percobaan.")
     return False
 
-def debug_screen_elements(d):
-    print("=== DEBUG: Elemen yang ada di layar ===")
+def inspect_ui_elements(d):
+    print("======= UI Elements Inspector =======")
     try:
-        edit_texts = d(className="android.widget.EditText")
-        print(f"Jumlah EditText ditemukan: {edit_texts.count}")
-        for i in range(edit_texts.count):
-            try:
-                info = edit_texts[i].info
-                print(f"EditText {i}: text='{info.get('text', '')}', bounds={info.get('bounds', '')}, resourceId='{info.get('resourceId', '')}'")
-            except:
-                print(f"EditText {i}: Error getting info")
-        mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-        print(f"Jumlah MultiAutoCompleteTextView ditemukan: {mac_fields.count}")
-        for i in range(mac_fields.count):
-            try:
-                info = mac_fields[i].info
-                print(f"MultiAutoCompleteTextView {i}: text='{info.get('text', '')}', bounds={info.get('bounds', '')}, resourceId='{info.get('resourceId', '')}'")
-            except:
-                print(f"MultiAutoCompleteTextView {i}: Error getting info")
-        buttons = d(className="android.widget.Button")
-        print(f"Jumlah Button ditemukan: {buttons.count}")
-        for i in range(buttons.count):
-            try:
-                info = buttons[i].info
-                print(f"Button {i}: text='{info.get('text', '')}', bounds={info.get('bounds', '')}, resourceId='{info.get('resourceId', '')}'")
-            except:
-                print(f"Button {i}: Error getting info")
-        keywords = ["code", "verification", "confirm", "next", "digit"]
-        for keyword in keywords:
-            elements = d(textContains=keyword)
-            if elements.exists:
-                print(f"Elemen dengan '{keyword}': {elements.count} ditemukan")
+        nodes = d.xpath("//*").all()
+        print(f"Total elements found: {len(nodes)}")
+        for node in nodes:
+            info = node.attrib
+            print("xpath:", node.xpath)
+            print(" resource-id:", info.get('resource-id', ''))
+            print(" class:", info.get('class', ''))
+            print(" text:", info.get('text', ''))
+            print(" content-desc:", info.get('content-desc', ''))
+            print(" bounds:", info.get('bounds', ''))
+            print("-" * 30)
     except Exception as e:
-        print(f"Error saat debug: {e}")
-        
+        print(f"Error saat inspect UI: {e}")
+
 def handle_existing_account_popup(d, timeout=15):
     """
     Menangani pop-up dari Instagram Lite ketika email sudah terdaftar di akun lain.
@@ -405,12 +387,12 @@ def handle_existing_account_popup(d, timeout=15):
                     time.sleep(0.5)
                 print("Popup belum hilang setelah klik. Coba lagi...")
             else:
-                print("XPath 'Create new account' tidak ditemukan. Debug UI...")
+                print("XPath 'Create new account' tidak ditemukan. Inspect UI...")
+                inspect_ui_elements(d)
         time.sleep(0.5)
 
     print("Pop-up email sudah terdaftar tidak terdeteksi atau gagal klik.")
     return False
-
 
 def set_birthday(d, min_age=18, max_age=30):
     print("Set birthday dengan metode 'Enter age instead'...")
@@ -426,6 +408,7 @@ def set_birthday(d, min_age=18, max_age=30):
         time.sleep(1)
     else:
         print("Tombol Next pada birthday tidak ditemukan!")
+        inspect_ui_elements(d)
         return
     
     for _ in range(10):
@@ -446,6 +429,7 @@ def set_birthday(d, min_age=18, max_age=30):
         time.sleep(1)
     else:
         print("Pop up OK tidak muncul.")
+        inspect_ui_elements(d)
 
     # 3. Tunggu tombol "Enter age instead" muncul, lalu klik (XPath)
     xpath_enter_age = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[4]/android.view.View[6]'
@@ -469,7 +453,7 @@ def set_birthday(d, min_age=18, max_age=30):
         time.sleep(1)
     else:
         print("Tombol 'Enter age instead' tidak ditemukan!")
-        debug_screen_elements(d)
+        inspect_ui_elements(d)
         return
 
     # 4. Isi usia di halaman "Enter your age"
@@ -501,7 +485,7 @@ def set_birthday(d, min_age=18, max_age=30):
         time.sleep(1)
     else:
         print("Field usia tidak ditemukan!")
-        debug_screen_elements(d)
+        inspect_ui_elements(d)
         return
 
     # 5. Klik tombol Next lagi (umumnya text "Next" atau "Berikutnya" atau dengan XPath yang sama)
@@ -524,7 +508,7 @@ def set_birthday(d, min_age=18, max_age=30):
         time.sleep(1)
     else:
         print("Tombol Next/ Berikutnya tidak ditemukan setelah isi usia!")
-        debug_screen_elements(d)
+        inspect_ui_elements(d)
 
     print("Birthday selesai diisi dengan metode Enter age instead.")
 
@@ -564,6 +548,7 @@ def install_instagram_lite():
         print("Tombol Install diklik via text (fallback).")
     else:
         print("Tombol Install tidak ditemukan! Gagal install Instagram Lite.")
+        inspect_ui_elements(d)
         return False
     
     print("Menunggu proses install selesai (tombol Buka muncul)...")
@@ -593,6 +578,7 @@ def install_instagram_lite():
             return True
         time.sleep(2)
     print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
+    inspect_ui_elements(d)
     return False
 
 def register_instagram_lite(email, fullname, password):
@@ -601,6 +587,9 @@ def register_instagram_lite(email, fullname, password):
     d.app_start("com.instagram.lite")
     time.sleep(5)
     handle_permission_popup(d, timeout=10)
+
+    print("Inspect elemen setelah aplikasi dibuka:")
+    inspect_ui_elements(d)
 
     print("Klik tombol 'Create new account' (by text/XPath)...")
     if d(text="Create new account").exists:
@@ -611,7 +600,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(5)
     else:
         print("Tombol 'Create new account' tidak ditemukan! (text/XPath)")
-        debug_screen_elements(d)
+        inspect_ui_elements(d)
         return
 
     print("Klik tombol 'Sign up with email' (by text/XPath)...")
@@ -623,7 +612,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(3)
     else:
         print("Tombol 'Sign up with email' tidak ditemukan! (text/XPath)")
-        debug_screen_elements(d)
+        inspect_ui_elements(d)
         return
     print("Mengisi field email...")
     email_field = d(className="android.widget.MultiAutoCompleteTextView")
@@ -635,8 +624,9 @@ def register_instagram_lite(email, fullname, password):
         print(f"Email '{email}' berhasil diisi")
     else:
         print("Field email tidak ditemukan!")
+        inspect_ui_elements(d)
         return
-    debug_screen_elements(d)
+    inspect_ui_elements(d)
     print("Mencari tombol Next...")
     next_clicked = False
     if d(text="Next").exists:
@@ -662,9 +652,10 @@ def register_instagram_lite(email, fullname, password):
             time.sleep(1)
         else:
             print("Tidak ada pop-up email terdaftar yang muncul, melanjutkan...")
-        debug_screen_elements(d)
+        inspect_ui_elements(d)
     else:
         print("Gagal menemukan tombol Next!")
+        inspect_ui_elements(d)
         return
 
     print("Cek apakah langsung masuk ke halaman verifikasi kode...")
@@ -705,6 +696,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
     else:
         print("Field nama lengkap/password tidak ditemukan! Cek UI.")
+        inspect_ui_elements(d)
         return
 
     print("Klik Next untuk melanjutkan registrasi...")
@@ -737,6 +729,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
     else:
         print("Tombol Next pada halaman 'account is almost ready' tidak ditemukan!")
+        inspect_ui_elements(d)
     time.sleep(3)
     
     print("Cek apakah muncul halaman 'Add a profile photo'...")
@@ -757,6 +750,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
     else:
         print("Tombol Skip pada halaman Add a profile photo tidak ditemukan!")
+        inspect_ui_elements(d)
     
     xpath_skip_contacts = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
     for _ in range(10):
@@ -773,6 +767,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
     else:
         print("Tombol Skip pada halaman sync kontak tidak ditemukan!")
+        inspect_ui_elements(d)
         
     print("Registrasi Instagram Lite selesai! Jika masih ada langkah tambahan, lakukan manual.")
     return
