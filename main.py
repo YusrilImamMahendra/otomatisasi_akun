@@ -12,7 +12,7 @@ ADB_PATH = r"C:\LDPlayer\LDPlayer9\adb.exe"
 LDPLAYER_DEVICE = "emulator-5554"
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
-EMAIL = "cobaja.1933@gmail.com"
+EMAIL = "otomatisregis@gmail.com"
 #EMAIL_PASSWORD = "hpxifkmjcxzmjrrq"#
 
 
