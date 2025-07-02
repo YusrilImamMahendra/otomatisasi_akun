@@ -1,4 +1,4 @@
-import os, string
+import os, string, sys, webbrowser, threading
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -6,23 +6,20 @@ import uiautomator2 as u2
 import uuid
 import random
 from gmail_api_utils import get_verification_code_from_email_gmail_api
-
+    
 # KONFIGURASI PATH DAN DEVICE UNTUK LDPLAYER
 LDPLAYER_EXE_PATH = r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
 ADB_PATH = r"C:\LDPlayer\LDPlayer9\adb.exe"
 LDPLAYER_DEVICE = "emulator-5554"
+APK_PATH = r"C:\xampp\htdocs\otomatisai_akun\instagram-lite-466-0-0-9-106.apk"  
 
 # Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
 EMAIL = "otomatisregis@gmail.com"
 
-# Konfigurasi IMAP untuk Gmail
-#IMAP_SERVER = "imap.gmail.com"
-#IMAP_PORT = 993
-
 def generate_random_fullname(length=10):
     # Membuat username random, misal: "user123abc"
     chars = string.ascii_lowercase + string.digits
-    return 'soap' + ''.join(random.choices(chars, k=length))
+    return 'JaWa' + ''.join(random.choices(chars, k=length))
 
 def generate_random_password(length=12):
     # Kombinasi huruf besar, kecil, angka, dan simbol
@@ -74,6 +71,13 @@ def inspect_ui_elements(d, filter_texts=None):
     except Exception as e:
         print(f"Error inspecting UI elements: {e}")
         
+def connect_device():
+    d = u2.connect(LDPLAYER_DEVICE)
+    print('Connected:', d.info)
+    # Optional: buka UI Inspector
+    print("Buka browser ke http://localhost:7912 untuk debug UI realtime")
+    return d
+
 def start_ldplayer_and_connect_adb():
     print("Menjalankan emulator LDPlayer...")
     subprocess.Popen([LDPLAYER_EXE_PATH])
@@ -443,7 +447,7 @@ def set_birthday(d, min_age=18, max_age=30):
 
     # --- LANGKAH 1: Klik tombol Next di halaman Add your birthday ---
     print("\nLangkah 1: Mengklik tombol Next...")
-    xpath_next = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    xpath_next = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[3]'
     
     if d.xpath(xpath_next).exists:
         d.xpath(xpath_next).click()
@@ -455,7 +459,6 @@ def set_birthday(d, min_age=18, max_age=30):
 
     # --- LANGKAH 2: Menangani popup 'Enter your real birthday' ---
     print("\nLangkah 2: Menangani popup birthday...")
-    #save_xml_to_file(d, "before_popup")
     time.sleep(2)
 
     # Klik OK di popup
@@ -473,7 +476,6 @@ def set_birthday(d, min_age=18, max_age=30):
 
     # --- LANGKAH 3: Klik tombol "Enter age instead" ---
     print("\nLangkah 3: Mencari dan mengklik tombol 'Enter age instead'...")
-    #save_xml_to_file(d, "after_popup")
     
     # Coba klik menggunakan koordinat yang tepat dari XML
     try:
@@ -485,7 +487,6 @@ def set_birthday(d, min_age=18, max_age=30):
         return False
 
     # Verifikasi halaman Enter your age muncul
-    #save_xml_to_file(d, "enter_age_verification")
     time.sleep(2)
 
     # Cek field input
@@ -541,6 +542,7 @@ def set_birthday(d, min_age=18, max_age=30):
 
     print("Proses pengisian birthday selesai!")
     return True
+
 def get_utc_timestamp():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -586,59 +588,56 @@ def check_instagram_lite_installed():
     print("Instagram Lite belum terinstall.")
     return False
 
+def uninstall_instagram_lite():
+    print("Menguninstall Instagram Lite jika sudah terinstall...")
+    try:
+        uninstall_cmd = f'"{ADB_PATH}" -s {LDPLAYER_DEVICE} uninstall com.instagram.lite'
+        result = subprocess.getoutput(uninstall_cmd)
+        print(f"Hasil perintah ADB uninstall: {result}")
+        if "Success" in result:
+            print("Instagram Lite berhasil diuninstall.")
+            return True
+        else:
+            print("Gagal menguninstall Instagram Lite!")
+            return False
+    except Exception as e:
+        print(f"Error saat menguninstall Instagram Lite: {e}")
+        return False
+
 def install_instagram_lite():
     print("Menghubungkan ke emulator dengan uiautomator2...")
-    d = u2.connect(LDPLAYER_DEVICE)
-    print("Membuka Google Play Store...")
-    d.app_start("com.android.vending")
-    time.sleep(4)
-    print("Klik search bar di bagian atas (LDPlayer)...")
-    d.click(350, 60)
-    time.sleep(2)
-    d.send_keys("Instagram Lite")
-    time.sleep(3)
-    d.press("enter")
-    time.sleep(3)
-    print("Klik tombol Install di panel kanan (detail aplikasi, via XPath)...")
-    xpath_install = '//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View[2]/android.view.View/android.view.View[1]/android.view.View[5]/android.widget.Button[2]'
-    if d.xpath(xpath_install).exists:
-        d.xpath(xpath_install).click()
-        print("Tombol Install (detail aplikasi) berhasil diklik via XPath.")
-    elif d(text="Install").exists:
-        d(text="Install").click()
-        print("Tombol Install diklik via text (fallback).")
-    else:
-        print("Tombol Install tidak ditemukan! Gagal install Instagram Lite.")
+    d = connect_device()
+    
+    # Cek apakah file APK ada
+    if not os.path.exists(APK_PATH):
+        print(f"File APK tidak ditemukan di: {APK_PATH}")
         return False
     
-    print("Menunggu proses install selesai (tombol Buka muncul)...")
-    for _ in range(120):
-        # Tambahkan pengecekan tombol Open dengan XPath yang diberikan
-        xpath_open = '//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View[2]/android.view.View/android.view.View[1]/android.view.View[5]/android.widget.Button'
-        if d.xpath(xpath_open).exists:
-            print("Tombol Open ditemukan via XPath, mengklik...")
-            d.xpath(xpath_open).click()
-            time.sleep(5)
-            # Handle permission popup setelah membuka aplikasi
-            handle_permission_popup(d)
-            return True
-        elif d(text="Open").exists:
-            print("Tombol Open ditemukan via text, mengklik...")
-            d(text="Open").click()
-            time.sleep(5)
-            # Handle permission popup setelah membuka aplikasi
-            handle_permission_popup(d)
-            return True
-        elif d(text="Buka").exists:
-            print("Tombol Buka ditemukan, mengklik...")
-            d(text="Buka").click()
-            time.sleep(5)
-            # Handle permission popup setelah membuka aplikasi
-            handle_permission_popup(d)
-            return True
-        time.sleep(4)
-    print("Timeout: Gagal mendeteksi bahwa Instagram Lite sudah terinstall.")
-    return False
+    print(f"Memulai instalasi Instagram Lite dari APK: {APK_PATH}...")
+    try:
+        # Install APK menggunakan ADB
+        install_cmd = f'"{ADB_PATH}" -s {LDPLAYER_DEVICE} install "{APK_PATH}"'
+        result = subprocess.getoutput(install_cmd)
+        print(f"Hasil perintah ADB install: {result}")
+        
+        if "Success" in result:
+            print("Instalasi APK berhasil.")
+        else:
+            print("Instalasi APK gagal!")
+            return False
+    except Exception as e:
+        print(f"Error saat instalasi APK: {e}")
+        return False
+
+    # Tunggu beberapa saat untuk memastikan aplikasi terinstall
+    time.sleep(5)
+    
+    # Verifikasi instalasi
+    if not check_instagram_lite_installed():
+        print("Verifikasi gagal: Instagram Lite tidak terdeteksi setelah instalasi.")
+        return False
+    print("Instalasi dan pembukaan aplikasi Instagram Lite berhasil.")
+    return True
 
 def register_instagram_lite(email, fullname, password):
     def save_xml_to_file(d, prefix):
@@ -650,7 +649,7 @@ def register_instagram_lite(email, fullname, password):
             print(f"Saved XML inspection to {filename}")
         except Exception as e:
             print(f"Gagal menyimpan XML: {e}")
-    d = u2.connect(LDPLAYER_DEVICE)
+    d = connect_device()
     print("Membuka aplikasi Instagram Lite...")
     d.app_start("com.instagram.lite")
     time.sleep(10)
@@ -729,15 +728,15 @@ def register_instagram_lite(email, fullname, password):
         next_clicked = True
     if next_clicked:
         print("Tombol Next berhasil diklik, menunggu halaman berikutnya...")
-        print("Menunggu 15 detik untuk email verifikasi masuk...")
-        time.sleep(15)
     # WAJIB: Tunggu dan handle popup jika muncul
         handled = handle_existing_account_popup(d, timeout=10)
         if handled:
-            print("Popup existing account berhasil dihandle, lanjutkan registrasi.")
-            time.sleep(1)
+            print("Menunggu 15 detik untuk email verifikasi masuk...")
+            time.sleep(15)
         else:
             print("Tidak ada pop-up email terdaftar yang muncul, melanjutkan...")
+            print("Menunggu 15 detik untuk email verifikasi masuk...")
+            time.sleep(15)
     else:
         print("Gagal menemukan tombol Next!")
         return
@@ -797,45 +796,24 @@ def register_instagram_lite(email, fullname, password):
     print("Masuk ke halaman birthday, mengisi tanggal lahir...")
     set_birthday(d)
     
-    print("\nMenangani halaman 'your account is almost ready'...")
-    time.sleep(3)
-
-    try:
-        print("Mencoba klik tombol Next (area atas)...")
-        # Target the "Next" button using text match with clickable check
-        if d(text="Next", clickable=True).exists:
-            d(text="Next", clickable=True).click()
-            print("Tombol Next berhasil diklik berdasarkan text dan clickable.")
-        else:
-            # Fallback to coordinates near the center of the "Next" button (adjust based on screenshot)
-            d.click(450, 1463)  # Adjusted to target the blue "Next" button
-            time.sleep(2)
-            if "your account is almost ready" in d.dump_hierarchy().lower():
-                print("Masih di halaman yang sama, mencoba posisi alternatif...")
-                click_positions = [
-                    (350, 1463),  # Sisi kiri atas
-                    (550, 1463),  # Sisi kanan atas
-                    (450, 1480),  # Sedikit lebih bawah untuk memastikan tombol
-                ]
-                for x, y in click_positions:
-                    print(f"Mencoba klik di koordinat ({x}, {y})")
-                    d.click(x, y)
-                    time.sleep(2)
-                    if "your account is almost ready" not in d.dump_hierarchy().lower():
-                        print(f"Berhasil! Klik di ({x}, {y}) berhasil")
-                        break
-        # Final verification
-        if "your account is almost ready" not in d.dump_hierarchy().lower():
-            print("Berhasil melanjutkan dari halaman 'your account is almost ready'")
-        else:
-            print("Gagal melanjutkan, masih di halaman yang sama")
-            save_xml_to_file(d, "still_on_account_ready")
-
-    except Exception as e:
-        print(f"Error saat mencoba mengklik tombol Next: {e}")
-        save_xml_to_file(d, "error_clicking_next")
+    print("halaman 'your account is almost ready'...")
+    time.sleep(2)
     
-    save_xml_to_file(d, "halaman selanjutnya")
+    xpathnext = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[6]'
+    for _ in range(10):
+        if d.xpath(xpathnext).exists:      
+            d.xpath(xpathnext).click()
+            print("Tombol next pada halaman sync kontak berhasil diklik via xpath.")
+            time.sleep(2)
+            break
+        elif d(text="Next").exists:
+            d(text="Next").click()
+            print("Tombol Next diklik via text.")
+            time.sleep(2)
+            break
+    else:
+        print("Tombol Next pada tidak ditemukan!") 
+        
     xpath_skip_contacts = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
     for _ in range(10):
         if d.xpath(xpath_skip_contacts).exists:
@@ -851,8 +829,14 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
     else:
         print("Tombol Skip pada halaman sync kontak tidak ditemukan!")
-    
-
+        
+    print("Mencoba melewati halaman 'Find friends'...")
+    xpathskips = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    if d.xpath(xpathskips).exists:
+        d.xpath(xpathskips).click()
+        print("Tombol Skip pada halaman sync kontak berhasil diklik via xpath.")
+        time.sleep(2)
+        
     print("\n=== REGISTRASI BERHASIL ===")
     # Get registration result
     print("\nCollecting registration results...")
@@ -895,18 +879,22 @@ def main():
     unlock_screen()
     print("Menunggu 10 detik sebelum memulai automasi...")
     time.sleep(10)
+    
+    # Cek apakah Instagram Lite sudah terinstall, lalu uninstall
     if check_instagram_lite_installed():
-        print("Instagram Lite sudah terinstall, langsung menuju proses registrasi...")
-        time.sleep(2)
+        print("Instagram Lite sudah terinstall, menguninstall terlebih dahulu...")
+        if not uninstall_instagram_lite():
+            print("Gagal menguninstall Instagram Lite, proses dihentikan.")
+            return
+        time.sleep(5)  # Tunggu beberapa saat setelah uninstall
+    
+    print("Memulai proses install Instagram Lite...")
+    if install_instagram_lite():
+        print("Instagram Lite berhasil diinstall, melanjutkan ke proses registrasi...")
+        time.sleep(5)
         register_instagram_lite(EMAIL, FULLNAME, PASSWORD)
     else:
-        print("Instagram Lite belum terinstall, memulai proses install...")
-        if install_instagram_lite():
-            print("Instagram Lite berhasil diinstall, melanjutkan ke proses registrasi...")
-            time.sleep(5)
-            register_instagram_lite(EMAIL, FULLNAME, PASSWORD)
-        else:
-            print("Automasi install Instagram Lite gagal, proses dihentikan.")
+        print("Automasi install Instagram Lite gagal, proses dihentikan.")
 
 if __name__ == "__main__":
     try:
