@@ -1,4 +1,4 @@
-import os, string, sys, webbrowser, threading
+import os, string
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -142,7 +142,80 @@ def wait_for(d, text=None, resourceId=None, bounds=None, timeout=20):
             return True
         time.sleep(1)
     return False
+def set_proxy_with_proxydroid(d, host, port, user, password):
+    """Mengatur dan mengaktifkan proxy di aplikasi ProxyDroid."""
+    print("Mengatur proxy menggunakan ProxyDroid...")
+    try:
+        # Buka aplikasi ProxyDroid
+        d.app_start("org.proxydroid", stop=True)
+        time.sleep(3)
 
+        # Isi Host
+        d(resourceId="org.proxydroid:id/hostEditText").set_text(host)
+        print(f"Host diisi: {host}")
+
+        # Isi Port
+        d(resourceId="org.proxydroid:id/portEditText").set_text(str(port))
+        print(f"Port diisi: {port}")
+
+        # Scroll ke bawah untuk menemukan pengaturan otentikasi
+        d.swipe("up", 0.5)
+        time.sleep(1)
+
+        # Aktifkan "Enable Authentication"
+        auth_switch = d(resourceId="org.proxydroid:id/authCheckBox")
+        if not auth_switch.is_checked():
+            auth_switch.click()
+            print("Otentikasi diaktifkan.")
+        
+        # Isi Username
+        d(resourceId="org.proxydroid:id/userEditText").set_text(user)
+        print("Username diisi.")
+
+        # Isi Password
+        d(resourceId="org.proxydroid:id/passwordEditText").set_text(password)
+        print("Password diisi.")
+        time.sleep(1)
+        
+        # Kembali ke atas
+        d.swipe("down", 0.5)
+
+        # Klik switch utama untuk mengaktifkan proxy
+        main_switch = d(resourceId="org.proxydroid:id/onOffSwitch")
+        if not main_switch.is_checked():
+            main_switch.click()
+            print("ProxyDroid Switch diaktifkan [ON].")
+        
+        # Tutup aplikasi
+        d.app_stop("org.proxydroid")
+        print("Pengaturan ProxyDroid selesai.")
+        return True
+
+    except Exception as e:
+        print(f"❌ Gagal mengotomatisasi ProxyDroid: {e}")
+        return False
+
+def disable_proxy_with_proxydroid(d):
+    """Menonaktifkan proxy di aplikasi ProxyDroid."""
+    print("Menonaktifkan proxy di ProxyDroid...")
+    try:
+        # Buka aplikasi
+        d.app_start("org.proxydroid", stop=True)
+        time.sleep(2)
+        
+        # Klik switch utama untuk menonaktifkan
+        main_switch = d(resourceId="org.proxydroid:id/onOffSwitch")
+        if main_switch.is_checked():
+            main_switch.click()
+            print("ProxyDroid Switch dinonaktifkan [OFF].")
+
+        # Tutup aplikasi
+        d.app_stop("org.proxydroid")
+        return True
+    except Exception as e:
+        print(f"Gagal menonaktifkan ProxyDroid: {e}")
+        return False
+    
 def handle_permission_popup(d, timeout=10):
     """
     Menangani pop-up perizinan Instagram Lite secara otomatis.
@@ -671,14 +744,14 @@ def register_instagram_lite(fullname, password):
     }
 
     try:
-        cookies = d.shell(['cat', '/data/data/com.instagram.lite/app_webview/Cookies']).output
-        print("\nSuccessfully retrieved cookies")
+        # Menjalankan perintah 'cat' sebagai superuser (root)
+        command = 'su -c "cat /data/data/com.instagram.lite/app_webview/Cookies"'
+        cookies = d.shell(command).output
+        print("\nSuccessfully retrieved cookies (with root access)")
     except Exception as e:
         print(f"Failed to get cookies: {e}")
         cookies = None
-
     save_registration_result(registration_result, cookies)
-    
     print("\n=== REGISTRATION COMPLETED ===")
     print(f"Status: {registration_result['status']}")
     print(f"Username: {registration_result['username']}")
@@ -694,6 +767,63 @@ def register_instagram_lite(fullname, password):
 
 
 def main():
+    # Ganti dengan detail dari dashboard Bright Data Anda
+    BRIGHTDATA_HOST = "brd.superproxy.io"
+    BRIGHTDATA_PORT = 33335
+    BRIGHTDATA_USER = "brd-customer-hl_b8cda2cd-zone-mobileoto"
+    BRIGHTDATA_PASS = "u0pq558ml67o" 
+
+    # Tentukan berapa banyak akun yang ingin Anda buat
+    jumlah_akun_didaftar = 3 
+
+    for i in range(jumlah_akun_didaftar):
+        print(f"\n===== MEMULAI PENDAFTARAN AKUN KE-{i + 1} DARI {jumlah_akun_didaftar} =====")
+        
+        d = None # Inisialisasi variabel d
+        try:
+            # Jalankan emulator jika belum berjalan
+            start_ldplayer_and_connect_adb()
+            d = connect_device() # Hubungkan ke device
+            
+            # Nonaktifkan proxy lama untuk memastikan sesi bersih
+            disable_proxy_with_proxydroid(d)
+            time.sleep(2)
+
+            # Atur proxy baru untuk pendaftaran kali ini
+            if not set_proxy_with_proxydroid(d, BRIGHTDATA_HOST, BRIGHTDATA_PORT, BRIGHTDATA_USER, BRIGHTDATA_PASS):
+                print("Gagal mengatur proxy, membatalkan pendaftaran ini.")
+                continue
+
+            # Beri waktu agar koneksi proxy stabil
+            print("Menunggu 5 detik agar koneksi proxy stabil...")
+            time.sleep(5)
+            
+            # Reset aplikasi Instagram untuk sesi baru
+            if check_instagram_lite_installed():
+                uninstall_instagram_lite()
+            
+            time.sleep(3) 
+
+            # Install dan jalankan proses registrasi
+            if install_instagram_lite():
+                print("Memulai proses registrasi...")
+                new_fullname = generate_random_fullname()
+                new_password = generate_random_password()
+                register_instagram_lite(new_fullname, new_password)
+            else:
+                print("Gagal menginstall Instagram Lite.")
+        
+        except Exception as e:
+            print(f"Terjadi error besar pada pendaftaran akun ke-{i + 1}: {e}")
+        
+        finally:
+            # --- PENTING: Selalu nonaktifkan proxy setelah selesai ---
+            if d: # Pastikan device terhubung sebelum mencoba menonaktifkan
+                disable_proxy_with_proxydroid(d)
+            print("Siklus pendaftaran selesai. Menunggu sebelum memulai yang berikutnya...")
+            time.sleep(15) 
+
+    print("\n===== SEMUA PROSES PENDAFTARAN SELESAI =====")
     start_ldplayer_and_connect_adb()
     unlock_screen()
     print("Menunggu 5 detik sebelum memulai automasi...")
@@ -716,13 +846,6 @@ def main():
 
 if __name__ == "__main__":
     try:
-        result = main()
-        if isinstance(result, dict):
-            print("\n=== FINAL RESULTS ===")
-            print(f"Registration Status: {result.get('status', 'N/A')}")
-            print(f"Username: {result.get('username', 'N/A')}")
-            print(f"Password: {result.get('password', 'N/A')}")
-            print(f"Phone Number: {result.get('phone_number', 'N/A')}")
-            print(f"Registration Time (UTC): {result.get('registration_time', 'N/A')}")
+        main()
     except Exception as e:
         print(f"\nAn error occurred in the main execution: {e}")
