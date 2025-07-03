@@ -803,7 +803,7 @@ def register_instagram_lite(email, fullname, password):
     for _ in range(10):
         if d.xpath(xpathnext).exists:      
             d.xpath(xpathnext).click()
-            print("Tombol next pada halaman sync kontak berhasil diklik via xpath.")
+            print("Tombol next pada halaman almos redi berhasil diklik via xpath.")
             time.sleep(2)
             break
         elif d(text="Next").exists:
@@ -814,7 +814,9 @@ def register_instagram_lite(email, fullname, password):
     else:
         print("Tombol Next pada tidak ditemukan!") 
         
-    xpath_skip_contacts = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    print('masuk ke halaman sync contact')
+    time.sleep(5)
+    xpath_skip_contacts = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[3]/android.view.View[1]'
     for _ in range(10):
         if d.xpath(xpath_skip_contacts).exists:
             d.xpath(xpath_skip_contacts).click()
@@ -831,14 +833,23 @@ def register_instagram_lite(email, fullname, password):
         print("Tombol Skip pada halaman sync kontak tidak ditemukan!")
         
     print("Mencoba melewati halaman 'Find friends'...")
-    xpathskips = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
+    xpathskips = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[3]'
     if d.xpath(xpathskips).exists:
         d.xpath(xpathskips).click()
         print("Tombol Skip pada halaman sync kontak berhasil diklik via xpath.")
         time.sleep(2)
+    else:
+        print("halaman find friends tidak ada ")
+        
+    print("halaman follow 5 orangs")
+    xpathnextf = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[1]'
+    if d.xpath(xpathnextf).exists:
+        d.xpath(xpathnextf).click()
+        print("Tombol neext berhaisl di klik")
+        time.sleep(5)
         
     print("\n=== REGISTRASI BERHASIL ===")
-    # Get registration result
+    print("Masuk Ke halaman HOME")
     print("\nCollecting registration results...")
     registration_result = {
         'status': 'success' if next_clicked else 'warning',
