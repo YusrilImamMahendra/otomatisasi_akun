@@ -5,16 +5,20 @@ from datetime import datetime, timezone
 import uiautomator2 as u2
 import uuid
 import random
-from gmail_api_utils import get_verification_code_from_email_gmail_api
+from sms_api_utils import (
+    request_phone_number,
+    get_phone_code,
+    strip_country_code,
+    get_sms_code,
+)
     
 # KONFIGURASI PATH DAN DEVICE UNTUK LDPLAYER
 LDPLAYER_EXE_PATH = r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
 ADB_PATH = r"C:\LDPlayer\LDPlayer9\adb.exe"
 LDPLAYER_DEVICE = "emulator-5554"
 APK_PATH = r"C:\xampp\htdocs\otomatisai_akun\instagram-lite-466-0-0-9-106.apk"  
-
-# Data akun yang ingin diregistrasikan (ganti sesuai kebutuhan)
-EMAIL = "otomatisregis@gmail.com"
+API_KEY = "9d3fc401fB8665790fd1dfB167547e92"
+ID_NEGARA = 73 
 
 def generate_random_fullname(length=10):
     # Membuat username random, misal: "user123abc"
@@ -229,168 +233,6 @@ def handle_permission_popup(d, timeout=10):
     
     return permission_handled
 
-def manual_input_verification_code():
-    print("\n" + "="*50)
-    print("PERHATIAN: Tidak dapat mengambil kode verifikasi otomatis")
-    print("Silakan cek email Anda dan masukkan kode verifikasi secara manual")
-    print("="*50)
-    while True:
-        code = input("Masukkan kode verifikasi (6 digit): ").strip()
-        if len(code) == 6 and code.isdigit():
-            return code
-        else:
-            print("Kode harus 6 digit angka. Silakan coba lagi.")
-
-def handle_email_verification(d, max_attempts=3, kode_start_time=None):
-    print("Mendeteksi halaman verifikasi email...")
-    verification_detected = False
-    
-    # Set start time jika belum ada
-    if kode_start_time is None:
-        kode_start_time = time.time()
-        print(f"Set kode_start_time ke: {kode_start_time}")
-    
-    # Deteksi halaman verifikasi dengan timeout lebih pendek
-    for attempt in range(15):  # Kurangi timeout menjadi 30 detik
-        print(f"Percobaan {attempt + 1}: Mencari halaman verifikasi...")
-        indicators = [
-            d(textContains="confirmation").exists,
-            d(textContains="verification").exists,
-            d(textContains="code").exists,
-            d(textContains="confirm").exists,
-            d(textContains="Enter").exists,
-            d(textContains="6-digit").exists,
-            d(textContains="digit").exists,
-            d(className="android.widget.EditText").exists,
-            d(resourceId="com.instagram.lite:id/confirmation_code").exists,
-            d(className="android.widget.MultiAutoCompleteTextView").exists,
-        ]
-        if any(indicators):
-            verification_detected = True
-            print("Halaman verifikasi email terdeteksi!")
-            break
-        time.sleep(2)
-        
-    if not verification_detected:
-        print("Halaman verifikasi tidak terdeteksi setelah 30 detik")
-        return False
-
-    exclude_codes = []
-    for attempt in range(max_attempts):
-        print(f"Percobaan verifikasi kode ke-{attempt+1}...")
-        
-        # Tambahkan jeda sebelum mencoba mendapatkan kode
-        if attempt > 0:
-            print("Menunggu 10 detik sebelum mencoba lagi...")
-            time.sleep(10)
-        
-        # Ambil kode verifikasi dengan timeout yang lebih pendek
-        print("Mencoba mengambil kode verifikasi dari email...")
-        verification_code = get_verification_code_from_email_gmail_api(
-            timeout=60,  # 1 menit timeout
-            exclude_codes=exclude_codes,
-            start_time=kode_start_time
-        )
-        
-        if verification_code:
-            print(f"Kode verifikasi ditemukan: {verification_code}")
-        else:
-            print("Tidak dapat mengambil kode otomatis, mencoba input manual...")
-            verification_code = manual_input_verification_code()
-            
-        if not verification_code:
-            print("Tidak ada kode verifikasi yang tersedia!")
-            continue
-            
-        exclude_codes.append(verification_code)
-        print(f"Memasukkan kode verifikasi: {verification_code}")
-
-        # Isi field kode
-        success = False
-        
-        # Coba resource ID yang paling umum dulu
-        primary_resource_ids = [
-            "com.instagram.lite:id/confirmation_code",
-            "com.instagram.lite:id/code_text",
-        ]
-        
-        for resource_id in primary_resource_ids:
-            if d(resourceId=resource_id).exists:
-                try:
-                    code_field = d(resourceId=resource_id)
-                    code_field.click()
-                    time.sleep(1)
-                    code_field.clear_text()
-                    time.sleep(0.5)
-                    code_field.set_text(verification_code)
-                    time.sleep(2)
-                    success = True
-                    break
-                except Exception as e:
-                    print(f"Error pada resource ID {resource_id}: {e}")
-                    continue
-
-        if not success:
-            # Coba EditText
-            edit_texts = d(className="android.widget.EditText")
-            if edit_texts.exists:
-                for i in range(min(edit_texts.count, 3)):
-                    try:
-                        field = edit_texts[i]
-                        field.click()
-                        time.sleep(0.5)
-                        field.clear_text()
-                        time.sleep(0.5)
-                        field.set_text(verification_code)
-                        time.sleep(1)
-                        success = True
-                        break
-                    except Exception as e:
-                        print(f"Error pada EditText {i}: {e}")
-                        continue
-
-        if not success:
-            # Fallback ke koordinat
-            x, y = 450, 180
-            d.click(x, y)
-            time.sleep(1)
-            d.send_keys(verification_code)
-            time.sleep(1)
-            success = True
-
-        if success:
-            # Klik tombol Next
-            if d(text="Next").exists:
-                d(text="Next").click()
-            elif d(textContains="Next").exists:
-                d(textContains="Next").click()
-            else:
-                d.click(450, 400)
-            
-            print("Menunggu response setelah input kode...")
-            time.sleep(5)
-
-            # Cek hasil verifikasi
-            if d(textContains="That code isn't valid").exists or d(textContains="incorrect").exists:
-                print("Kode tidak valid, mencoba kode baru...")
-                continue
-            else:
-                # Tunggu dan cek apakah masih di halaman verifikasi
-                time.sleep(3)
-                if not any([
-                    d(textContains="confirmation").exists,
-                    d(textContains="verification").exists,
-                    d(textContains="code").exists
-                ]):
-                    print("Verifikasi berhasil!")
-                    return True
-                else:
-                    print("Masih di halaman verifikasi, mencoba kode baru...")
-                    continue
-
-    print("Gagal verifikasi setelah beberapa percobaan.")
-    return False
-
 def handle_existing_account_popup(d, timeout=15):
     """
     Menangani pop-up dari Instagram Lite ketika email sudah terdaftar di akun lain.
@@ -447,7 +289,7 @@ def set_birthday(d, min_age=18, max_age=30):
 
     # --- LANGKAH 1: Klik tombol Next di halaman Add your birthday ---
     print("\nLangkah 1: Mengklik tombol Next...")
-    xpath_next = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[3]'
+    xpath_next = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
     
     if d.xpath(xpath_next).exists:
         d.xpath(xpath_next).click()
@@ -463,7 +305,7 @@ def set_birthday(d, min_age=18, max_age=30):
 
     # Klik OK di popup
     try:
-        d.click(450, 800)  # Koordinat tengah
+        d.click(430, 840)  # Koordinat tengah
         print("Klik koordinat tengah untuk popup")
         time.sleep(1)
         d.click(450, 850)  # Koordinat OK
@@ -479,7 +321,7 @@ def set_birthday(d, min_age=18, max_age=30):
     
     # Coba klik menggunakan koordinat yang tepat dari XML
     try:
-        d.click(450, 1495)  # Titik tengah dari bounds="[354,1481][546,1510]"
+        d.click(354, 1481)  # Titik tengah dari bounds="[354,1481][546,1510]"
         print("Enter age instead diklik via koordinat yang tepat")
         time.sleep(3)
     except Exception as e:
@@ -520,7 +362,7 @@ def set_birthday(d, min_age=18, max_age=30):
     print("\nLangkah 5: Klik Next final...")
     try:
         # Menggunakan koordinat dari bounds="[30,385][870,451]"
-        d.click(450, 418)  # Titik tengah dari bounds Next button
+        d.click(425, 404)  # Titik tengah dari bounds Next button
         print("Next final diklik via koordinat")
         time.sleep(2)
         
@@ -639,125 +481,91 @@ def install_instagram_lite():
     print("Instalasi dan pembukaan aplikasi Instagram Lite berhasil.")
     return True
 
-def register_instagram_lite(email, fullname, password):
-    def save_xml_to_file(d, prefix):
-        try:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"{prefix}_{timestamp}.xml"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(d.dump_hierarchy())
-            print(f"Saved XML inspection to {filename}")
-        except Exception as e:
-            print(f"Gagal menyimpan XML: {e}")
+
+def register_instagram_lite(fullname, password):
+    activation_id, full_number = request_phone_number(API_KEY, ID_NEGARA, service='ig')
+    if not activation_id or not full_number:
+        print(f"Nomor telepon untuk negara ID {ID_NEGARA} tidak tersedia atau gagal divalidasi.")
+        return False
+    
+    phone_code = get_phone_code(ID_NEGARA)
+    if not phone_code:
+        print(f"Kode telepon untuk negara ID {ID_NEGARA} tidak ditemukan.")
+        return False
+    
+    local_number = strip_country_code(full_number, phone_code)
+    print(f"Nomor Telepon Didapat: +{phone_code}{local_number} (Lokal: {local_number})")
+
     d = connect_device()
-    print("Membuka aplikasi Instagram Lite...")
     d.app_start("com.instagram.lite")
     time.sleep(10)
-    handle_permission_popup(d, timeout=10)
+    handle_permission_popup(d)
 
     print("Inspect elemen setelah aplikasi dibuka:")
     inspect_ui_elements(d, filter_texts=["create", "account", "button"])
 
-    print("Klik tombol 'Create new account'")
-    xpath_create_new_account = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]'
-    if d.xpath(xpath_create_new_account).exists:
-        d.xpath(xpath_create_new_account).click()
-        print("Tombol 'Create new account' berhasil diklik via XPath.")
+    xpath_create = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[2]/android.view.ViewGroup[2]'
+    if d.xpath(xpath_create).wait(timeout=20): # Menggunakan wait
+        d.xpath(xpath_create).click()
         time.sleep(5)
     else:
         print("Tombol 'Create new account' tidak ditemukan!")
-        inspect_ui_elements(d, filter_texts=["create", "account", "button"])
-        return
+        return False
 
-    print("Klik tombol 'Sign up with email'")
-    xpath_signup_email = '//android.widget.FrameLayout[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout/android.view.ViewGroup[3]/android.view.ViewGroup[3]'
-    if d.xpath(xpath_signup_email).exists:
-        d.xpath(xpath_signup_email).click()
-        print("Tombol 'Sign up with email' berhasil diklik via XPath.")
-        time.sleep(5)
-    else:
-        found = False
-        for _ in range(5):
-            if d(text="Sign up with email").exists:
-                d(text="Sign up with email").click()
-                print("Tombol 'Sign up with email' berhasil diklik via text.")
-                found = True
-                time.sleep(5)
-                break
-            elif d(textContains="email").exists:
-                d(textContains="email").click()
-                print("Tombol 'Sign up with email' berhasil diklik via textContains.")
-                found = True
-                time.sleep(5)
-                break
-            time.sleep(1)
-        if not found:
-            print("Tombol 'Sign up with email' tidak ditemukan!")
-            inspect_ui_elements(d, filter_texts=["email"])
-            return
+    # Klik field code negara
+    d.xpath('//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[2]').click()
+    time.sleep(2)
 
-    print("Mengisi field email...")
-    for _ in range(10):
-        email_field = d(className="android.widget.MultiAutoCompleteTextView")
-        if email_field.exists:
-            email_field.clear_text()
-            time.sleep(0.5)
-            email_field.set_text(email)
-            time.sleep(2)
-            print(f"Email '{email}' berhasil diisi")
-            break
+    # Klik search, isi kode negara
+    if d.xpath('//androidx.recyclerview.widget.RecyclerView/android.view.ViewGroup[1]/android.view.ViewGroup[1]/android.view.View[1]').wait(timeout=5):
+        d.xpath('//androidx.recyclerview.widget.RecyclerView/android.view.ViewGroup[1]/android.view.ViewGroup[1]/android.view.View[1]').click()
+    search_field = d(className="android.widget.MultiAutoCompleteTextView")
+    search_field.set_text(phone_code)
+    time.sleep(2)
+
+    # Pilih negara pertama
+    d.xpath('//androidx.recyclerview.widget.RecyclerView/android.view.ViewGroup[1]').click_exists(timeout=5)
+    time.sleep(1)
+
+    # Isi nomor hp lokal
+    phone_field = d(className="android.widget.MultiAutoCompleteTextView")
+    phone_field.set_text(local_number)
+    time.sleep(1)
+
+    # Klik Next
+    d.xpath('//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]').click_exists(timeout=5)
+    print("Nomor dan negara berhasil diinput, menunggu halaman verifikasi kode...")
+
+    # Menunggu halaman verifikasi kode muncul
+    print("Menunggu halaman verifikasi kode muncul...")
+    
+    otp_field_selector = d(className="android.widget.MultiAutoCompleteTextView", textContains="_")
+    if otp_field_selector.wait(timeout=30):
+        print("Halaman verifikasi terdeteksi (berdasarkan field input).")
+        print("Meminta kode OTP dari API...")
+        
+        otp = get_sms_code(API_KEY, activation_id)
+        if not otp:
+            print("Tidak menerima kode OTP dari API. Proses registrasi gagal.")
+            return False
+        # Mengisi kode ke field yang sama yang sudah kita temukan
+        # Kita panggil selectornya lagi untuk memastikan elemennya fresh
+        d(className="android.widget.MultiAutoCompleteTextView", textContains="_").set_text(otp)
+        print(f"Kode OTP '{otp}' berhasil diinput.")
         time.sleep(1)
     else:
-        print("Field email tidak ditemukan!")
-        inspect_ui_elements(d, filter_texts=["email"])
-        return
-    print("Mencari tombol Next...")
-    next_clicked = False
-    if d(text="Next").exists:
-        d(text="Next").click()
-        next_clicked = True
-    elif d(textContains="Next").exists:
-        d(textContains="Next").click()
-        next_clicked = True
-    elif d(resourceId="com.instagram.lite:id/next_button").exists:
-        d(resourceId="com.instagram.lite:id/next_button").click()
-        next_clicked = True
-    else:
-        print("Mencoba klik tombol Next dengan koordinat alternatif...")
-        d.click(450, 420)
-        next_clicked = True
-    if next_clicked:
-        print("Tombol Next berhasil diklik, menunggu halaman berikutnya...")
-    # WAJIB: Tunggu dan handle popup jika muncul
-        handled = handle_existing_account_popup(d, timeout=10)
-        if handled:
-            print("Menunggu 15 detik untuk email verifikasi masuk...")
-            time.sleep(15)
-        else:
-            print("Tidak ada pop-up email terdaftar yang muncul, melanjutkan...")
-            print("Menunggu 15 detik untuk email verifikasi masuk...")
-            time.sleep(15)
-    else:
-        print("Gagal menemukan tombol Next!")
-        return
+        print("Gagal mendeteksi halaman verifikasi kode dalam 30 detik.")
+        return False
 
-    print("Cek apakah langsung masuk ke halaman verifikasi kode...")
-    for _ in range(10):
-        mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-        if mac_fields.exists and "_" in mac_fields[0].info.get("text", ""):
-            print("Halaman verifikasi kode terdeteksi, mengeksekusi handle_email_verification ...")
-            verif_ok = handle_email_verification(d)
-            print("Registrasi: handle_email_verification selesai. Melanjutkan isi nama lengkap & password.")
-            for _ in range(15):
-                mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
-                if not (mac_fields.exists and "_" in mac_fields[0].info.get("text", "")):
-                    print("Field kode sudah hilang, lanjut ke pengisian nama lengkap.")
-                    break
-                print("Masih di halaman verifikasi kode, menunggu...")
-                time.sleep(1)
-            break
-        time.sleep(1)
+    # Klik tombol Next setelah memasukkan OTP
+    if d.xpath('//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]').click_exists(timeout=10):
+        print("Tombol Next (setelah OTP) diklik.")
+    else:
+        d.click(500, 400) 
+        print("Tombol Next (setelah OTP) diklik via koordinat.")
 
+    time.sleep(3)
+    
     print("Mencari dan mengisi field nama lengkap & password...")
     for _ in range(10):
         mac_fields = d(className="android.widget.MultiAutoCompleteTextView")
@@ -765,11 +573,14 @@ def register_instagram_lite(email, fullname, password):
             name_field = mac_fields[0]
             pass_field = mac_fields[1]
             name_field.click()
+            time.sleep(0.5)
             name_field.clear_text()
             name_field.set_text(fullname)
             time.sleep(1)
             print(f"Field nama lengkap diisi dengan '{fullname}'.")
+            
             pass_field.click()
+            time.sleep(0.5)
             pass_field.clear_text()
             pass_field.set_text(password)
             time.sleep(1)
@@ -779,7 +590,7 @@ def register_instagram_lite(email, fullname, password):
         time.sleep(1)
     else:
         print("Field nama lengkap/password tidak ditemukan! Cek UI.")
-        return
+        return False
 
     print("Klik Next untuk melanjutkan registrasi...")
     if d(text="Next").exists:
@@ -794,73 +605,71 @@ def register_instagram_lite(email, fullname, password):
     time.sleep(3)
 
     print("Masuk ke halaman birthday, mengisi tanggal lahir...")
-    set_birthday(d)
+    if not set_birthday(d):
+        print("Gagal mengatur tanggal lahir. Proses dihentikan.")
+        return False
     
     print("halaman 'your account is almost ready'...")
     time.sleep(2)
     
-    xpathnext = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[6]'
-    for _ in range(10):
-        if d.xpath(xpathnext).exists:      
-            d.xpath(xpathnext).click()
-            print("Tombol next pada halaman almos redi berhasil diklik via xpath.")
-            time.sleep(2)
-            break
-        elif d(text="Next").exists:
-            d(text="Next").click()
-            print("Tombol Next diklik via text.")
-            time.sleep(2)
-            break
+    xpathnext = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[6]'
+    if d.xpath(xpathnext).wait(timeout=15):      
+        d.xpath(xpathnext).click()
+        print("Tombol next pada halaman 'almost ready' berhasil diklik via xpath.")
+        time.sleep(2)
+    elif d(text="Next").wait(timeout=5):
+        d(text="Next").click()
+        print("Tombol Next diklik via text.")
+        time.sleep(2)
     else:
-        print("Tombol Next pada tidak ditemukan!") 
+        print("Tombol Next pada halaman 'almost ready' tidak ditemukan!") 
         
     print('masuk ke halaman sync contact')
     time.sleep(5)
-    xpath_skip_contacts = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[3]/android.view.View[1]'
-    for _ in range(10):
-        if d.xpath(xpath_skip_contacts).exists:
-            d.xpath(xpath_skip_contacts).click()
-            print("Tombol Skip pada halaman sync kontak berhasil diklik via xpath.")
-            time.sleep(2)
-            break
-        elif d(text="Skip").exists:
-            d(text="Skip").click()
-            print("Tombol Skip diklik via text.")
-            time.sleep(2)
-            break
-        time.sleep(1)
+    xpath_skip_contacts = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]/android.view.View[1]'
+    if d.xpath(xpath_skip_contacts).wait(timeout=15):
+        d.xpath(xpath_skip_contacts).click()
+        print("Tombol Skip pada halaman sync kontak berhasil diklik via xpath.")
+        time.sleep(2)
+    elif d(text="Skip").wait(timeout=5):
+        d(text="Skip").click()
+        print("Tombol Skip diklik via text.")
+        time.sleep(2)
     else:
         print("Tombol Skip pada halaman sync kontak tidak ditemukan!")
         
-    print("Mencoba melewati halaman 'Find friends'...")
-    xpathskips = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[3]'
-    if d.xpath(xpathskips).exists:
+    print("Mencoba melewati halaman profil poto")
+    xpathskips = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[3]/android.view.View[1]'
+    if d.xpath(xpathskips).wait(timeout=10):
         d.xpath(xpathskips).click()
-        print("Tombol Skip pada halaman sync kontak berhasil diklik via xpath.")
+        print("Tombol Skip pada halaman add poto berhasil diklik via xpath.")
         time.sleep(2)
     else:
-        print("halaman find friends tidak ada ")
+        print("Halaman 'add poto' tidak ditemukan atau sudah dilewati.")
         
     print("halaman follow 5 orangs")
-    xpathnextf = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[4]/android.view.ViewGroup[1]'
-    if d.xpath(xpathnextf).exists:
+    xpathnextf = '//*[@resource-id="com.instagram.lite:id/main_layout"]/android.widget.FrameLayout[1]/android.view.ViewGroup[3]/android.view.ViewGroup[1]'
+    if d.xpath(xpathnextf).wait(timeout=10):
         d.xpath(xpathnextf).click()
-        print("Tombol neext berhaisl di klik")
+        print("Tombol next (follow) berhasil di klik")
         time.sleep(5)
+    else:
+        print("Halaman 'follow' tidak ditemukan atau sudah dilewati.")
         
-    print("\n=== REGISTRASI BERHASIL ===")
+    print("\n✨ REGISTRASI BERHASIL ✨")
     print("Masuk Ke halaman HOME")
     print("\nCollecting registration results...")
+    
     registration_result = {
-        'status': 'success' if next_clicked else 'warning',
+        'status': 'success',
         'username': fullname,
         'password': password,
-        'email': email,
+        'phone_number': f"+{phone_code}{local_number}", 
+        'email': 'N/A', 
         'registration_time': get_utc_timestamp(),
         'system_user': os.getlogin()
     }
 
-    # Get cookies
     try:
         cookies = d.shell(['cat', '/data/data/com.instagram.lite/app_webview/Cookies']).output
         print("\nSuccessfully retrieved cookies")
@@ -868,42 +677,40 @@ def register_instagram_lite(email, fullname, password):
         print(f"Failed to get cookies: {e}")
         cookies = None
 
-    # Save and display results
     save_registration_result(registration_result, cookies)
     
     print("\n=== REGISTRATION COMPLETED ===")
     print(f"Status: {registration_result['status']}")
     print(f"Username: {registration_result['username']}")
     print(f"Password: {registration_result['password']}")
-    print(f"Email: {registration_result['email']}")
+    print(f"Phone Number: {registration_result['phone_number']}")
     print(f"Registration Time (UTC): {registration_result['registration_time']}")
-    print(f"System User: {registration_result['system_user']}")
     
     if cookies:
-        print("\n=== COOKIES RETRIEVED ===")
-        print(cookies)
+        print("\n=== COOKIES RETRIEVED (truncated) ===")
+        print(cookies[:300] + "...") 
 
     return registration_result
+
 
 def main():
     start_ldplayer_and_connect_adb()
     unlock_screen()
-    print("Menunggu 10 detik sebelum memulai automasi...")
-    time.sleep(10)
+    print("Menunggu 5 detik sebelum memulai automasi...")
+    time.sleep(5)
     
-    # Cek apakah Instagram Lite sudah terinstall, lalu uninstall
     if check_instagram_lite_installed():
         print("Instagram Lite sudah terinstall, menguninstall terlebih dahulu...")
         if not uninstall_instagram_lite():
             print("Gagal menguninstall Instagram Lite, proses dihentikan.")
             return
-        time.sleep(5)  # Tunggu beberapa saat setelah uninstall
+        time.sleep(5)  
     
     print("Memulai proses install Instagram Lite...")
     if install_instagram_lite():
         print("Instagram Lite berhasil diinstall, melanjutkan ke proses registrasi...")
         time.sleep(5)
-        register_instagram_lite(EMAIL, FULLNAME, PASSWORD)
+        register_instagram_lite(FULLNAME, PASSWORD)
     else:
         print("Automasi install Instagram Lite gagal, proses dihentikan.")
 
@@ -915,8 +722,7 @@ if __name__ == "__main__":
             print(f"Registration Status: {result.get('status', 'N/A')}")
             print(f"Username: {result.get('username', 'N/A')}")
             print(f"Password: {result.get('password', 'N/A')}")
-            print(f"Email: {result.get('email', 'N/A')}")
+            print(f"Phone Number: {result.get('phone_number', 'N/A')}")
             print(f"Registration Time (UTC): {result.get('registration_time', 'N/A')}")
-            print(f"System User: {result.get('system_user', 'N/A')}")
     except Exception as e:
-        print(f"\nError in main execution: {e}")
+        print(f"\nAn error occurred in the main execution: {e}")
